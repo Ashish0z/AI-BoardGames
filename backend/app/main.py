@@ -14,6 +14,7 @@ from .ai.services import AdaptiveAIStrategyService, GameCoachService
 from .core.models import Move, PlayerProfile
 from .core.store import InMemoryGameStore
 from .games.monopoly.game import MonopolyGame
+from .logging_utils import get_debug_logger
 
 
 class PlayerInput(BaseModel):
@@ -26,6 +27,8 @@ class PlayerInput(BaseModel):
 class CreateGameInput(BaseModel):
     game_type: str
     players: List[PlayerInput]
+    ai_prompt: Optional[str] = None
+    coach_prompt: Optional[str] = None
 
 
 class MoveInput(BaseModel):
@@ -38,6 +41,11 @@ class MoveInput(BaseModel):
 class ChatInput(BaseModel):
     player_id: Optional[str] = None
     message: str
+
+
+class PromptUpdateInput(BaseModel):
+    ai_prompt: Optional[str] = None
+    coach_prompt: Optional[str] = None
 
 
 app = FastAPI(title="AI Board Games Backend")
@@ -53,6 +61,7 @@ store = InMemoryGameStore()
 llm_client = OllamaClient()
 ai_service = AdaptiveAIStrategyService(llm_client)
 coach_service = GameCoachService(llm_client)
+debug_logger = get_debug_logger()
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 frontend_src = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -104,7 +113,17 @@ def create_game(payload: CreateGameInput) -> Dict[str, object]:
             )
             for player in payload.players
         ])
+        if payload.ai_prompt and payload.ai_prompt.strip():
+            state.metadata["ai_prompt"] = payload.ai_prompt.strip()
+        if payload.coach_prompt and payload.coach_prompt.strip():
+            state.metadata["coach_prompt"] = payload.coach_prompt.strip()
         store.save(game)
+        debug_logger.debug(
+            "create_game game_id=%s game_type=%s players=%s",
+            state.game_id,
+            state.game_type,
+            [player.id for player in state.players],
+        )
         return {"game_id": state.game_id, "state": state.__dict__}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -140,6 +159,15 @@ def apply_move(game_id: str, payload: MoveInput) -> Dict[str, object]:
                 reason=payload.reason,
             )
         )
+        debug_logger.debug(
+            "human_move game_id=%s player_id=%s action=%s payload=%s turn=%s last_event=%s",
+            game_id,
+            payload.player_id,
+            payload.action,
+            payload.payload,
+            state.metadata.get("turn"),
+            state.board.get("last_event"),
+        )
         return {"state": state.__dict__}
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -151,6 +179,16 @@ def apply_ai_move(game_id: str, player_id: str) -> Dict[str, object]:
         game = store.get(game_id)
         move = ai_service.choose_move(game, player_id)
         state = game.apply_move(move)
+        debug_logger.debug(
+            "ai_move game_id=%s player_id=%s action=%s payload=%s reason=%s turn=%s last_event=%s",
+            game_id,
+            player_id,
+            move.action,
+            move.payload,
+            move.reason,
+            state.metadata.get("turn"),
+            state.board.get("last_event"),
+        )
         return {"move": move.__dict__, "state": state.__dict__}
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -161,6 +199,34 @@ def chat(game_id: str, payload: ChatInput) -> Dict[str, object]:
     try:
         game = store.get(game_id)
         answer = coach_service.answer(game, payload.message)
+        debug_logger.debug(
+            "chat game_id=%s player_id=%s message=%s answer=%s",
+            game_id,
+            payload.player_id or "human",
+            payload.message,
+            answer,
+        )
         return {"answer": answer}
     except (KeyError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/games/{game_id}/prompts")
+def update_prompts(game_id: str, payload: PromptUpdateInput) -> Dict[str, object]:
+    try:
+        game = store.get(game_id)
+        if not game.state:
+            raise ValueError("Game has not started")
+        if payload.ai_prompt is not None:
+            game.state.metadata["ai_prompt"] = payload.ai_prompt.strip()
+        if payload.coach_prompt is not None:
+            game.state.metadata["coach_prompt"] = payload.coach_prompt.strip()
+        debug_logger.debug(
+            "update_prompts game_id=%s has_ai_prompt=%s has_coach_prompt=%s",
+            game_id,
+            bool(game.state.metadata.get("ai_prompt")),
+            bool(game.state.metadata.get("coach_prompt")),
+        )
+        return {"state": game.state.__dict__}
+    except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

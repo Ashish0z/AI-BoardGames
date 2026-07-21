@@ -38,13 +38,18 @@
 .sidebar select,
 .chat input,
 .trade-form input,
-.trade-form select {
+.trade-form select,
+.sidebar textarea {
   width: 100%;
   padding: 8px;
   border-radius: 8px;
   border: 1px solid #475569;
   background: #0b1220;
   color: #e2e8f0;
+}
+
+.sidebar textarea {
+  resize: vertical;
 }
 
 .sidebar button,
@@ -121,6 +126,11 @@
   line-height: 1.2;
 }
 
+.tile-price {
+  font-size: 8px;
+  opacity: 0.85;
+}
+
 .tile-property,
 .tile-railroad,
 .tile-utility {
@@ -137,6 +147,38 @@
   background: #1f3a5f;
 }
 
+.tile-group-brown {
+  border-top: 3px solid #8b5a2b;
+}
+
+.tile-group-light-blue {
+  border-top: 3px solid #86d3f7;
+}
+
+.tile-group-pink {
+  border-top: 3px solid #e879f9;
+}
+
+.tile-group-orange {
+  border-top: 3px solid #fb923c;
+}
+
+.tile-group-red {
+  border-top: 3px solid #f87171;
+}
+
+.tile-group-yellow {
+  border-top: 3px solid #fde047;
+}
+
+.tile-group-green {
+  border-top: 3px solid #4ade80;
+}
+
+.tile-group-dark-blue {
+  border-top: 3px solid #2563eb;
+}
+
 .board-center {
   grid-row: 2 / 11;
   grid-column: 2 / 11;
@@ -147,6 +189,18 @@
   align-items: center;
   justify-content: center;
   color: #94a3b8;
+  text-align: center;
+  padding: 16px;
+  gap: 6px;
+}
+
+.board-center p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.center-subtitle {
+  color: #cbd5e1;
 }
 
 .token {
@@ -184,6 +238,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.ai-runner {
+  margin: 0 0 8px;
+  color: #fbbf24;
 }
 
 .trade-form {
