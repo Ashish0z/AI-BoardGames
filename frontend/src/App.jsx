@@ -38,6 +38,31 @@ function getTileClassName(tile) {
   return `tile tile-${tile.type}${groupClass}`
 }
 
+const PLAYER_COLORS = ['#22d3ee', '#f59e0b', '#4ade80', '#f87171']
+
+const GROUP_COLORS = {
+  brown: '#8b5a2b',
+  light_blue: '#86d3f7',
+  pink: '#e879f9',
+  orange: '#fb923c',
+  red: '#f87171',
+  yellow: '#fde047',
+  green: '#4ade80',
+  dark_blue: '#2563eb',
+  railroad: '#94a3b8',
+  utility: '#94a3b8',
+}
+
+function getPlayerColor(playerId, players) {
+  const idx = players.findIndex((p) => p.id === playerId)
+  return idx >= 0 ? (PLAYER_COLORS[idx] ?? '#94a3b8') : '#94a3b8'
+}
+
+function getPlayerInitial(playerId, players) {
+  const player = players.find((p) => p.id === playerId)
+  return player ? player.name.charAt(0).toUpperCase() : '?'
+}
+
 function App() {
   const [games, setGames] = useState([
     { key: 'monopoly', label: 'Monopoly', enabled: true },
@@ -53,7 +78,13 @@ function App() {
   const [chatInput, setChatInput] = useState('')
   const [status, setStatus] = useState('Ready')
   const [tradeTarget, setTradeTarget] = useState('ai-1')
-  const [tradeOfferCash, setTradeOfferCash] = useState(100)
+  const [tradeOfferCash, setTradeOfferCash] = useState(0)
+  const [tradeRequestCash, setTradeRequestCash] = useState(0)
+  const [tradeOfferProperty, setTradeOfferProperty] = useState('')
+  const [tradeRequestProperty, setTradeRequestProperty] = useState('')
+  const [mortgageTarget, setMortgageTarget] = useState('')
+  const [unmortgageTarget, setUnmortgageTarget] = useState('')
+  const [buyHouseTarget, setBuyHouseTarget] = useState('')
   const [aiCount, setAiCount] = useState(1)
   const [aiPrompt, setAiPrompt] = useState('')
   const [coachPrompt, setCoachPrompt] = useState('')
@@ -220,13 +251,24 @@ function App() {
 
   const boardTiles = state?.board?.tiles || []
   const positions = state?.board?.positions || {}
+  const ownership = state?.board?.ownership || {}
+  const mortgages = state?.board?.mortgages || {}
+  const houses = state?.board?.houses || {}
+  const monopoliesByPlayer = state?.board?.monopolies_by_player || {}
+  const propertiesByPlayer = state?.board?.properties_by_player || {}
   const currentPlayerId = state?.current_player_id
   const currentTileIndex = currentPlayerId == null ? null : Number(positions[currentPlayerId] ?? 0)
   const currentTile = currentTileIndex === null ? null : boardTiles.find((tile) => tile.index === currentTileIndex)
-  const currentTileOwnership = currentTile ? state?.board?.ownership?.[String(currentTile.index)] : null
+  const currentTileOwnership = currentTile ? ownership[String(currentTile.index)] : null
   const currentTileOwnerName = currentTileOwnership
     ? players.find((player) => player.id === currentTileOwnership)?.name || currentTileOwnership
     : null
+
+  const tilesMap = useMemo(() => {
+    const map = {}
+    boardTiles.forEach((t) => { map[t.index] = t })
+    return map
+  }, [boardTiles])
 
   return (
     <div className="app-shell">
@@ -277,12 +319,68 @@ function App() {
         <div className="money-box">
           <h3>Players</h3>
           {players.map((player) => (
-            <div key={player.id} className="money-row">
+            <div key={player.id} className="money-row" style={{ borderLeftColor: getPlayerColor(player.id, players) }}>
               <span>{player.name}</span>
               <span>${state?.board?.money?.[player.id] ?? 0}</span>
             </div>
           ))}
         </div>
+
+        {players.length > 0 && (
+          <div className="properties-box">
+            <h3>Properties</h3>
+            {players.map((player) => {
+              const playerProps = propertiesByPlayer[player.id] || []
+              const playerMonopolies = monopoliesByPlayer[player.id] || []
+              const color = getPlayerColor(player.id, players)
+              return (
+                <div key={player.id} className="player-props">
+                  <div className="player-props-header" style={{ borderLeftColor: color }}>
+                    <span>{player.name}</span>
+                    {playerMonopolies.length > 0 && (
+                      <span className="monopoly-count" title={`Monopolies: ${playerMonopolies.join(', ')}`}>
+                        ★ {playerMonopolies.length}
+                      </span>
+                    )}
+                  </div>
+                  {playerProps.length === 0 ? (
+                    <p className="no-props">None</p>
+                  ) : (
+                    <ul className="prop-list">
+                      {playerProps.map((idx) => {
+                        const tile = tilesMap[idx]
+                        if (!tile) return null
+                        const isMortgaged = Boolean(mortgages[String(idx)])
+                        const houseCount = Number(houses[String(idx)] || 0)
+                        const group = tile.color_group
+                        const isMonopoly = group && playerMonopolies.includes(group)
+                        return (
+                          <li key={idx} className={`prop-item${isMortgaged ? ' prop-mortgaged' : ''}`}>
+                            {group && (
+                              <span
+                                className="prop-color-dot"
+                                style={{ background: GROUP_COLORS[group] || '#888' }}
+                                title={group.replace(/_/g, ' ')}
+                              />
+                            )}
+                            <span className="prop-name">{tile.name}</span>
+                            {isMonopoly && <span className="prop-monopoly" title="Monopoly">★</span>}
+                            {isMortgaged && <span className="prop-badge prop-badge-m" title="Mortgaged">M</span>}
+                            {houseCount > 0 && (
+                              <span className="prop-badge prop-badge-h" title={houseCount === 5 ? 'Hotel' : `${houseCount} house(s)`}>
+                                {houseCount === 5 ? '🏨' : `🏠×${houseCount}`}
+                              </span>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </aside>
 
       <main className="main panel">
@@ -306,18 +404,42 @@ function App() {
           <div className="board-grid">
             {boardTiles.map((tile) => {
               const [row, col] = getTileCoordinate(tile.index)
+              const ownerId = ownership[String(tile.index)]
+              const ownerColor = ownerId ? getPlayerColor(ownerId, players) : null
+              const ownerInitial = ownerId ? getPlayerInitial(ownerId, players) : null
+              const ownerName = ownerId ? (players.find((p) => p.id === ownerId)?.name || ownerId) : null
+              const isMortgaged = Boolean(mortgages[String(tile.index)])
+              const houseCount = Number(houses[String(tile.index)] || 0)
+              const tileTitle = `${tile.name} (${tile.type})${ownerName ? ' — owned by ' + ownerName : ''}${isMortgaged ? ' [Mortgaged]' : ''}`
               return (
                 <div
                   key={tile.index}
                   className={getTileClassName(tile)}
                   style={{ gridRow: row + 1, gridColumn: col + 1 }}
-                  title={`${tile.name} (${tile.type})`}
+                  title={tileTitle}
                 >
                   <span className="tile-index">{tile.index}</span>
                   <span className="tile-name">{tile.name}</span>
                   <span className="tile-price">
                     {tile.price ? `$${tile.price}` : tile.amount ? `Tax $${tile.amount}` : ''}
                   </span>
+                  <div className="tile-status-row">
+                    {ownerColor && (
+                      <span
+                        className="tile-owner-badge"
+                        style={{ background: ownerColor }}
+                        title={`Owned by ${ownerName}`}
+                      >
+                        {ownerInitial}
+                      </span>
+                    )}
+                    {isMortgaged && <span className="tile-mortgage-badge" title="Mortgaged">M</span>}
+                    {houseCount > 0 && (
+                      <span className="tile-house-count" title={houseCount === 5 ? 'Hotel' : `${houseCount} house${houseCount > 1 ? 's' : ''}`}>
+                        {houseCount === 5 ? 'H' : houseCount}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -351,35 +473,149 @@ function App() {
               if (move.action === 'roll_dice') {
                 return (
                   <button key={move.action} onClick={() => runMove('roll_dice', rollTwoDice())}>
-                    Roll Dice
+                    🎲 Roll Dice
                   </button>
                 )
               }
-              if (move.action === 'offer_trade') {
+
+              if (move.action === 'accept_trade') {
+                const offer = move.offer || {}
+                const fromName = players.find((p) => p.id === offer.from_player_id)?.name || offer.from_player_id
+                const offerPropName = offer.offer_property != null ? tilesMap[offer.offer_property]?.name : null
+                const reqPropName = offer.request_property != null ? tilesMap[offer.request_property]?.name : null
                 return (
-                  <div key={move.action} className="trade-form">
-                    <select value={tradeTarget} onChange={(e) => setTradeTarget(e.target.value)}>
-                      {aiPlayers.map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min="0"
-                      value={tradeOfferCash}
-                      onChange={(e) => setTradeOfferCash(Number(e.target.value))}
-                    />
-                    <button onClick={() => runMove('offer_trade', { to_player_id: tradeTarget, offer_cash: tradeOfferCash })}>
-                      Offer Trade
+                  <div key="incoming_trade" className="incoming-trade">
+                    <p className="trade-from"><strong>{fromName}</strong> offers a trade:</p>
+                    <ul className="trade-details">
+                      {offer.offer_cash > 0 && <li>Gives you: ${offer.offer_cash}</li>}
+                      {offerPropName && <li>Gives you: {offerPropName}</li>}
+                      {offer.request_cash > 0 && <li>Wants from you: ${offer.request_cash}</li>}
+                      {reqPropName && <li>Wants from you: {reqPropName}</li>}
+                    </ul>
+                    <div className="trade-respond-row">
+                      <button className="btn-accept" onClick={() => runMove('accept_trade', { offer_index: 0 })}>✓ Accept</button>
+                      <button className="btn-decline" onClick={() => runMove('decline_trade', { offer_index: 0 })}>✕ Decline</button>
+                    </div>
+                  </div>
+                )
+              }
+
+              if (move.action === 'decline_trade') {
+                return null
+              }
+
+              if (move.action === 'offer_trade') {
+                const humanProps = (propertiesByPlayer[humanId] || []).map((idx) => tilesMap[idx]).filter(Boolean)
+                const targetProps = (propertiesByPlayer[tradeTarget] || []).map((idx) => tilesMap[idx]).filter(Boolean)
+                return (
+                  <div key="offer_trade" className="trade-form">
+                    <div className="trade-row">
+                      <label>Trade with</label>
+                      <select value={tradeTarget} onChange={(e) => setTradeTarget(e.target.value)}>
+                        {aiPlayers.map((player) => (
+                          <option key={player.id} value={player.id}>{player.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="trade-row">
+                      <label>Offer cash</label>
+                      <input type="number" min="0" value={tradeOfferCash} onChange={(e) => setTradeOfferCash(Number(e.target.value))} />
+                    </div>
+                    <div className="trade-row">
+                      <label>Offer property</label>
+                      <select value={tradeOfferProperty} onChange={(e) => setTradeOfferProperty(e.target.value)}>
+                        <option value="">None</option>
+                        {humanProps.map((tile) => (
+                          <option key={tile.index} value={String(tile.index)}>{tile.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="trade-row">
+                      <label>Request cash</label>
+                      <input type="number" min="0" value={tradeRequestCash} onChange={(e) => setTradeRequestCash(Number(e.target.value))} />
+                    </div>
+                    <div className="trade-row">
+                      <label>Request property</label>
+                      <select value={tradeRequestProperty} onChange={(e) => setTradeRequestProperty(e.target.value)}>
+                        <option value="">None</option>
+                        {targetProps.map((tile) => (
+                          <option key={tile.index} value={String(tile.index)}>{tile.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={() => runMove('offer_trade', {
+                      to_player_id: tradeTarget,
+                      offer_cash: tradeOfferCash,
+                      request_cash: tradeRequestCash,
+                      offer_property: tradeOfferProperty !== '' ? Number(tradeOfferProperty) : undefined,
+                      request_property: tradeRequestProperty !== '' ? Number(tradeRequestProperty) : undefined,
+                    })}>
+                      📤 Send Trade Offer
                     </button>
                   </div>
                 )
               }
+
+              if (move.action === 'mortgage_property') {
+                const props = move.properties || []
+                const target = mortgageTarget || (props.length > 0 ? String(props[0].index) : '')
+                return (
+                  <div key="mortgage" className="action-form">
+                    <select value={target} onChange={(e) => setMortgageTarget(e.target.value)}>
+                      {props.map((p) => (
+                        <option key={p.index} value={String(p.index)}>
+                          {p.name} (+${p.mortgage_value})
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={() => runMove('mortgage_property', { property_index: Number(target || props[0]?.index) })}>
+                      Mortgage
+                    </button>
+                  </div>
+                )
+              }
+
+              if (move.action === 'unmortgage_property') {
+                const props = move.properties || []
+                const target = unmortgageTarget || (props.length > 0 ? String(props[0].index) : '')
+                return (
+                  <div key="unmortgage" className="action-form">
+                    <select value={target} onChange={(e) => setUnmortgageTarget(e.target.value)}>
+                      {props.map((p) => (
+                        <option key={p.index} value={String(p.index)}>
+                          {p.name} (${p.cost})
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={() => runMove('unmortgage_property', { property_index: Number(target || props[0]?.index) })}>
+                      Unmortgage
+                    </button>
+                  </div>
+                )
+              }
+
+              if (move.action === 'buy_house') {
+                const props = move.properties || []
+                const target = buyHouseTarget || (props.length > 0 ? String(props[0].index) : '')
+                return (
+                  <div key="buy_house" className="action-form">
+                    <select value={target} onChange={(e) => setBuyHouseTarget(e.target.value)}>
+                      {props.map((p) => (
+                        <option key={p.index} value={String(p.index)}>
+                          {p.name} (${p.cost}, {p.current_houses} 🏠)
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={() => runMove('buy_house', { property_index: Number(target || props[0]?.index) })}>
+                      🏠 Build
+                    </button>
+                  </div>
+                )
+              }
+
               return (
                 <button key={move.action} onClick={() => runMove(move.action)}>
-                  {move.action}
+                  {move.action.replace(/_/g, ' ')}
                 </button>
               )
             })}

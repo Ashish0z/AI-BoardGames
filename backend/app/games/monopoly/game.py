@@ -6,6 +6,24 @@ from typing import Dict, List
 from ...core.base import BoardGame
 from ...core.models import GameState, Move, PlayerProfile
 
+# All property groups keyed by colour name → list of board indices
+_COLOR_GROUPS: Dict[str, List[int]] = {
+    "brown": [1, 3],
+    "light_blue": [6, 8, 9],
+    "pink": [11, 13, 14],
+    "orange": [16, 18, 19],
+    "red": [21, 23, 24],
+    "yellow": [26, 27, 29],
+    "green": [31, 32, 34],
+    "dark_blue": [37, 39],
+    "railroad": [5, 15, 25, 35],
+    "utility": [12, 28],
+}
+# Only colour-property groups support house building
+_BUILDABLE_GROUPS: Dict[str, List[int]] = {
+    k: v for k, v in _COLOR_GROUPS.items() if k not in ("railroad", "utility")
+}
+
 
 class MonopolyGame(BoardGame):
     def __init__(self) -> None:
@@ -42,6 +60,9 @@ class MonopolyGame(BoardGame):
             "jail_turns": {player.id: 0 for player in players},
             "pending_action": None,
             "trade_offers": [],
+            "mortgages": {},
+            "houses": {},
+            "monopolies_by_player": {player.id: [] for player in players},
             "last_event": "Game started",
         }
 
@@ -61,7 +82,7 @@ class MonopolyGame(BoardGame):
         responses = self._open_offers_for(player_id)
         if responses:
             return [
-                {"action": "accept_trade", "description": "Accept incoming trade"},
+                {"action": "accept_trade", "description": "Accept incoming trade", "offer": responses[0]},
                 {"action": "decline_trade", "description": "Decline incoming trade"},
             ]
 
@@ -73,7 +94,33 @@ class MonopolyGame(BoardGame):
                 {"action": "end_turn", "description": "Stay in jail and end turn"},
             ]
 
-        moves = [{"action": "offer_trade", "description": "Offer a trade to another player"}]
+        moves: List[Dict[str, object]] = []
+
+        mortgageable = self._mortgageable_for(player_id)
+        if mortgageable:
+            moves.append({
+                "action": "mortgage_property",
+                "description": "Mortgage a property to raise cash",
+                "properties": mortgageable,
+            })
+
+        unmortgageable = self._unmortgageable_for(player_id)
+        if unmortgageable:
+            moves.append({
+                "action": "unmortgage_property",
+                "description": "Unmortgage a property",
+                "properties": unmortgageable,
+            })
+
+        buildable = self._buildable_for(player_id)
+        if buildable:
+            moves.append({
+                "action": "buy_house",
+                "description": "Build a house or hotel on a monopoly property",
+                "properties": buildable,
+            })
+
+        moves.append({"action": "offer_trade", "description": "Offer a trade to another player"})
         if not bool(self.state.metadata.get("has_rolled", False)):
             moves.append({"action": "roll_dice", "description": "Roll and move forward"})
         moves.append({"action": "end_turn", "description": "Finish your turn"})
@@ -97,6 +144,12 @@ class MonopolyGame(BoardGame):
             self._handle_accept_trade(move)
         elif action == "decline_trade":
             self._handle_decline_trade(move)
+        elif action == "mortgage_property":
+            self._handle_mortgage(move)
+        elif action == "unmortgage_property":
+            self._handle_unmortgage(move)
+        elif action == "buy_house":
+            self._handle_buy_house(move)
         elif action == "pay_bail":
             self._handle_pay_bail(move.player_id)
         elif action == "end_turn":
@@ -359,11 +412,54 @@ class MonopolyGame(BoardGame):
             self.state.board["last_event"] = f"{player_id} can buy {tile['name']}"
             return
 
-        if owner != player_id:
-            rent = int(tile["rent"])
-            self.state.board["money"][player_id] = int(self.state.board["money"][player_id]) - rent
-            self.state.board["money"][owner] = int(self.state.board["money"][owner]) + rent
-            self.state.board["last_event"] = f"{player_id} paid ${rent} rent to {owner}"
+        if owner == player_id:
+            return
+
+        # No rent on mortgaged property
+        if self.state.board["mortgages"].get(str(tile_index)):
+            self.state.board["last_event"] = f"{player_id} landed on mortgaged {tile['name']}"
+            return
+
+        rent = self._calculate_rent(owner, tile)
+        self.state.board["money"][player_id] = int(self.state.board["money"][player_id]) - rent
+        self.state.board["money"][owner] = int(self.state.board["money"][owner]) + rent
+        self.state.board["last_event"] = f"{player_id} paid ${rent} rent to {owner}"
+
+    def _calculate_rent(self, owner: str, tile: Dict[str, object]) -> int:
+        """Return the rent owed on *tile* when it is owned by *owner*."""
+        if not self.state:
+            return 0
+        tile_index = int(tile["index"])
+        tile_type = str(tile["type"])
+        houses = self.state.board["houses"]
+        house_count = int(houses.get(str(tile_index), 0))
+        rent_tiers = tile.get("rent_tiers")
+        ownership = self.state.board["ownership"]
+
+        if tile_type == "railroad":
+            owned_count = sum(
+                1 for ri in _COLOR_GROUPS["railroad"]
+                if ownership.get(str(ri)) == owner
+            )
+            return [25, 50, 100, 200][min(owned_count - 1, 3)]
+
+        if tile_type == "utility":
+            owned_count = sum(
+                1 for ui in _COLOR_GROUPS["utility"]
+                if ownership.get(str(ui)) == owner
+            )
+            # Simplified: 4× or 10× an average dice roll of 7
+            return 28 if owned_count == 1 else 70
+
+        if rent_tiers and house_count > 0:
+            return int(rent_tiers[min(house_count, len(rent_tiers) - 1)])
+
+        base_rent = int(rent_tiers[0]) if rent_tiers else int(tile.get("rent", 0))
+        group = tile.get("color_group")
+        monopolies = self.state.board["monopolies_by_player"].get(owner, [])
+        if group and group in monopolies:
+            return base_rent * 2
+        return base_rent
 
     def _handle_buy(self, player_id: str) -> None:
         if not self.state:
@@ -384,6 +480,7 @@ class MonopolyGame(BoardGame):
         tile_name = self.state.board["tiles"][tile_index]["name"]
         self.state.board["pending_action"] = None
         self.state.board["last_event"] = f"{player_id} bought {tile_name}"
+        self._update_monopolies()
 
     def _handle_skip_purchase(self, player_id: str) -> None:
         if not self.state:
@@ -486,6 +583,198 @@ class MonopolyGame(BoardGame):
         if idx in self.state.board["properties_by_player"][from_player]:
             self.state.board["properties_by_player"][from_player].remove(idx)
         self.state.board["properties_by_player"][to_player].append(idx)
+        self._update_monopolies()
+
+    # ------------------------------------------------------------------
+    # Monopoly detection helpers
+    # ------------------------------------------------------------------
+
+    def _update_monopolies(self) -> None:
+        """Recompute which players own a full colour-group monopoly."""
+        if not self.state:
+            return
+        ownership = self.state.board["ownership"]
+        by_player: Dict[str, List[str]] = {p.id: [] for p in self.state.players}
+        for group, indices in _COLOR_GROUPS.items():
+            owners = {ownership.get(str(i)) for i in indices}
+            if len(owners) == 1 and None not in owners:
+                owner = next(iter(owners))
+                if owner in by_player:
+                    by_player[owner].append(group)
+        self.state.board["monopolies_by_player"] = by_player
+
+    def _tile_by_index(self, idx: int) -> Dict[str, object]:
+        if not self.state:
+            return {}
+        return self.state.board["tiles"][idx]
+
+    # ------------------------------------------------------------------
+    # Available-move sub-helpers
+    # ------------------------------------------------------------------
+
+    def _mortgageable_for(self, player_id: str) -> List[Dict[str, object]]:
+        if not self.state:
+            return []
+        props = self.state.board["properties_by_player"][player_id]
+        mortgages = self.state.board["mortgages"]
+        houses = self.state.board["houses"]
+        result = []
+        for idx in props:
+            if mortgages.get(str(idx)):
+                continue
+            if houses.get(str(idx), 0) > 0:
+                continue
+            tile = self._tile_by_index(idx)
+            group = tile.get("color_group")
+            if group and group in _BUILDABLE_GROUPS:
+                group_indices = _BUILDABLE_GROUPS[group]
+                if any(houses.get(str(gi), 0) > 0 for gi in group_indices):
+                    continue
+            price = int(tile.get("price", 0))
+            result.append({
+                "index": idx,
+                "name": str(tile["name"]),
+                "mortgage_value": price // 2,
+            })
+        return result
+
+    def _unmortgageable_for(self, player_id: str) -> List[Dict[str, object]]:
+        if not self.state:
+            return []
+        props = self.state.board["properties_by_player"][player_id]
+        mortgages = self.state.board["mortgages"]
+        cash = int(self.state.board["money"][player_id])
+        result = []
+        for idx in props:
+            if not mortgages.get(str(idx)):
+                continue
+            tile = self._tile_by_index(idx)
+            price = int(tile.get("price", 0))
+            unmortgage_cost = int(price * 0.55)  # 110% of 50% mortgage value
+            if cash >= unmortgage_cost:
+                result.append({
+                    "index": idx,
+                    "name": str(tile["name"]),
+                    "cost": unmortgage_cost,
+                })
+        return result
+
+    def _buildable_for(self, player_id: str) -> List[Dict[str, object]]:
+        if not self.state:
+            return []
+        monopolies = self.state.board["monopolies_by_player"].get(player_id, [])
+        mortgages = self.state.board["mortgages"]
+        houses = self.state.board["houses"]
+        cash = int(self.state.board["money"][player_id])
+        result = []
+        for group in monopolies:
+            if group not in _BUILDABLE_GROUPS:
+                continue
+            group_indices = _BUILDABLE_GROUPS[group]
+            if any(mortgages.get(str(gi)) for gi in group_indices):
+                continue
+            tile0 = self._tile_by_index(group_indices[0])
+            house_cost = int(tile0.get("house_cost", 9999))
+            if cash < house_cost:
+                continue
+            min_houses = min(int(houses.get(str(gi), 0)) for gi in group_indices)
+            for idx in group_indices:
+                h = int(houses.get(str(idx), 0))
+                if h < 5 and h <= min_houses:
+                    t = self._tile_by_index(idx)
+                    result.append({
+                        "index": idx,
+                        "name": str(t["name"]),
+                        "cost": house_cost,
+                        "current_houses": h,
+                    })
+        return result
+
+    # ------------------------------------------------------------------
+    # New action handlers
+    # ------------------------------------------------------------------
+
+    def _handle_mortgage(self, move: Move) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        idx = int(move.payload.get("property_index", -1))
+        if idx < 0:
+            raise ValueError("mortgage_property requires 'property_index'")
+        player_id = move.player_id
+        if idx not in self.state.board["properties_by_player"][player_id]:
+            raise ValueError("Player does not own this property")
+        mortgages = self.state.board["mortgages"]
+        if mortgages.get(str(idx)):
+            raise ValueError("Property is already mortgaged")
+        houses = self.state.board["houses"]
+        if houses.get(str(idx), 0) > 0:
+            raise ValueError("Sell houses before mortgaging")
+        tile = self._tile_by_index(idx)
+        group = tile.get("color_group")
+        if group and group in _BUILDABLE_GROUPS:
+            group_indices = _BUILDABLE_GROUPS[group]
+            if any(houses.get(str(gi), 0) > 0 for gi in group_indices):
+                raise ValueError("Sell all houses in colour group before mortgaging")
+        price = int(tile.get("price", 0))
+        mortgage_value = price // 2
+        mortgages[str(idx)] = True
+        self.state.board["money"][player_id] = int(self.state.board["money"][player_id]) + mortgage_value
+        self.state.board["last_event"] = f"{player_id} mortgaged {tile['name']} for ${mortgage_value}"
+
+    def _handle_unmortgage(self, move: Move) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        idx = int(move.payload.get("property_index", -1))
+        if idx < 0:
+            raise ValueError("unmortgage_property requires 'property_index'")
+        player_id = move.player_id
+        if idx not in self.state.board["properties_by_player"][player_id]:
+            raise ValueError("Player does not own this property")
+        mortgages = self.state.board["mortgages"]
+        if not mortgages.get(str(idx)):
+            raise ValueError("Property is not mortgaged")
+        tile = self._tile_by_index(idx)
+        price = int(tile.get("price", 0))
+        unmortgage_cost = int(price * 0.55)
+        if int(self.state.board["money"][player_id]) < unmortgage_cost:
+            raise ValueError("Insufficient funds to unmortgage")
+        mortgages[str(idx)] = False
+        self.state.board["money"][player_id] = int(self.state.board["money"][player_id]) - unmortgage_cost
+        self.state.board["last_event"] = f"{player_id} unmortgaged {tile['name']}"
+
+    def _handle_buy_house(self, move: Move) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        idx = int(move.payload.get("property_index", -1))
+        if idx < 0:
+            raise ValueError("buy_house requires 'property_index'")
+        player_id = move.player_id
+        tile = self._tile_by_index(idx)
+        group = tile.get("color_group")
+        if not group or group not in _BUILDABLE_GROUPS:
+            raise ValueError("Cannot build on this property type")
+        monopolies = self.state.board["monopolies_by_player"].get(player_id, [])
+        if group not in monopolies:
+            raise ValueError("Player does not own the full colour group")
+        mortgages = self.state.board["mortgages"]
+        group_indices = _BUILDABLE_GROUPS[group]
+        if any(mortgages.get(str(gi)) for gi in group_indices):
+            raise ValueError("Cannot build while any property in group is mortgaged")
+        houses = self.state.board["houses"]
+        current = int(houses.get(str(idx), 0))
+        if current >= 5:
+            raise ValueError("Property already has a hotel")
+        min_houses = min(int(houses.get(str(gi), 0)) for gi in group_indices)
+        if current > min_houses:
+            raise ValueError("Must build evenly across colour group (even-build rule)")
+        house_cost = int(tile.get("house_cost", 9999))
+        if int(self.state.board["money"][player_id]) < house_cost:
+            raise ValueError("Insufficient funds to build")
+        houses[str(idx)] = current + 1
+        self.state.board["money"][player_id] = int(self.state.board["money"][player_id]) - house_cost
+        label = "hotel" if current + 1 == 5 else "house"
+        self.state.board["last_event"] = f"{player_id} built a {label} on {tile['name']}"
+
 
     def _apply_card(self, player_id: str, card: Dict[str, object]) -> None:
         if not self.state:

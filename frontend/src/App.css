@@ -313,3 +313,270 @@
     height: min(92vw, 680px);
   }
 }
+
+/* ── Tile status row (owner badge, mortgage, houses) ── */
+.tile-status-row {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tile-owner-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 700;
+  color: #0b1220;
+  flex-shrink: 0;
+}
+
+.tile-mortgage-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 7px;
+  font-weight: 700;
+  background: #dc2626;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.tile-house-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  background: #16a34a;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* ── Properties panel ── */
+.properties-box {
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.properties-box h3 {
+  margin: 0 0 8px;
+}
+
+.player-props {
+  margin-bottom: 10px;
+}
+
+.player-props:last-child {
+  margin-bottom: 0;
+}
+
+.player-props-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 0 2px 6px;
+  border-left: 3px solid transparent;
+  margin-bottom: 4px;
+}
+
+.monopoly-count {
+  font-size: 11px;
+  color: #fde047;
+  font-weight: 700;
+}
+
+.no-props {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0 0 0 8px;
+}
+
+.prop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prop-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #111827;
+}
+
+.prop-item.prop-mortgaged {
+  opacity: 0.55;
+}
+
+.prop-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.prop-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-monopoly {
+  color: #fde047;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.prop-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.prop-badge-m {
+  background: #dc2626;
+  color: #fff;
+}
+
+.prop-badge-h {
+  background: #16a34a;
+  color: #fff;
+}
+
+/* ── Player money row colours ── */
+.money-row {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 6px;
+  border-left: 3px solid transparent;
+}
+
+/* ── Action forms (mortgage, unmortgage, buy_house) ── */
+.action-form {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.action-form select {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background: #0b1220;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+  max-width: 180px;
+}
+
+/* ── Trade form improvements ── */
+.trade-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  min-width: 220px;
+}
+
+.trade-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trade-row label {
+  font-size: 11px;
+  color: #94a3b8;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.trade-row input,
+.trade-row select {
+  flex: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+}
+
+/* ── Incoming trade offers ── */
+.incoming-trade {
+  padding: 10px;
+  background: #0b1220;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  min-width: 220px;
+}
+
+.trade-from {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.trade-details {
+  margin: 0 0 8px;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.trade-details li {
+  margin-bottom: 2px;
+}
+
+.trade-respond-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-accept {
+  border: 1px solid #16a34a;
+  border-radius: 8px;
+  background: #14532d;
+  color: #86efac;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.btn-decline {
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  background: #450a0a;
+  color: #fca5a5;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
