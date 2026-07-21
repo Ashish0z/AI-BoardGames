@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .ai.ollama import OllamaClient
@@ -52,6 +53,11 @@ store = InMemoryGameStore()
 llm_client = OllamaClient()
 ai_service = AdaptiveAIStrategyService(llm_client)
 coach_service = GameCoachService(llm_client)
+frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+frontend_src = Path(__file__).resolve().parents[2] / "frontend"
+
+if (frontend_dist / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="frontend-assets")
 
 
 def build_game(game_type: str):
@@ -67,8 +73,22 @@ def health() -> Dict[str, str]:
 
 @app.get("/ui")
 def ui() -> FileResponse:
-    ui_path = Path(__file__).resolve().parents[2] / "frontend" / "index.html"
+    ui_path = frontend_dist / "index.html"
+    if not ui_path.exists():
+        ui_path = frontend_src / "index.html"
     return FileResponse(ui_path)
+
+
+@app.get("/games/types")
+def game_types() -> Dict[str, object]:
+    return {
+        "games": [
+            {"key": "monopoly", "label": "Monopoly", "enabled": True},
+            {"key": "catan", "label": "Catan", "enabled": False},
+            {"key": "chess", "label": "Chess", "enabled": False},
+            {"key": "risk", "label": "Risk", "enabled": False},
+        ]
+    }
 
 
 @app.post("/games")
