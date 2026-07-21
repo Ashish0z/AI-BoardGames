@@ -1,0 +1,256 @@
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr 320px;
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.panel {
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.sidebar,
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar label,
+.sidebar select,
+.sidebar button,
+.chat input,
+.chat button,
+.controls button,
+.trade-form input,
+.trade-form select,
+.game-tabs button {
+  font: inherit;
+}
+
+.sidebar select,
+.chat input,
+.trade-form input,
+.trade-form select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.sidebar button,
+.controls button,
+.chat button,
+.game-tabs button {
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.game-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.game-tabs button.active {
+  border-color: #38bdf8;
+  background: #0c4a6e;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.main-header h1 {
+  margin: 0 0 8px;
+}
+
+.board-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.board-grid {
+  position: relative;
+  width: min(76vh, 760px);
+  height: min(76vh, 760px);
+  max-width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  grid-template-rows: repeat(11, minmax(0, 1fr));
+  gap: 3px;
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 6px;
+}
+
+.tile {
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 2px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tile-index {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.tile-name {
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.tile-property,
+.tile-railroad,
+.tile-utility {
+  background: #1f2937;
+}
+
+.tile-tax,
+.tile-go_to_jail {
+  background: #3f1d2e;
+}
+
+.tile-chance,
+.tile-community_chest {
+  background: #1f3a5f;
+}
+
+.board-center {
+  grid-row: 2 / 11;
+  grid-column: 2 / 11;
+  border: 1px dashed #334155;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.token {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+  transition: left 450ms ease, top 450ms ease;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+.token.human {
+  background: #22d3ee;
+  color: #06202a;
+}
+
+.token.ai {
+  background: #f59e0b;
+  color: #2e1600;
+}
+
+.controls {
+  border-top: 1px solid #334155;
+  padding-top: 10px;
+}
+
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trade-form {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.trade-form input {
+  width: 84px;
+}
+
+.status-box,
+.money-box {
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.status-box h3,
+.money-box h3 {
+  margin: 0 0 6px;
+}
+
+.status-box p,
+.money-row {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.money-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 220px;
+  background: #0b1220;
+}
+
+.chat-log p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.chat-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-actions input {
+  flex: 1;
+}
+
+@media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .board-grid {
+    width: min(92vw, 680px);
+    height: min(92vw, 680px);
+  }
+}
