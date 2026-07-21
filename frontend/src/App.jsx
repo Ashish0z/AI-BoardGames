@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const humanId = 'human-1'
@@ -142,7 +142,7 @@ function App() {
     }
   }
 
-  async function doAiMove(playerId = state?.current_player_id) {
+  const doAiMove = useCallback(async (playerId) => {
     if (!gameId || !playerId || playerId === humanId) return
     setIsAiThinking(true)
     setStatus(`AI ${playerId} is thinking...`)
@@ -156,8 +156,16 @@ function App() {
     setState(body.state)
     setStatus(`AI played: ${body.move.action}`)
     setIsAiThinking(false)
-    await refreshMoves(gameId, body.state)
-  }
+    if (body.state.current_player_id === humanId) {
+      const movesResponse = await fetch(`/games/${gameId}/moves/${humanId}`)
+      const movesPayload = await movesResponse.json()
+      if (movesResponse.ok) {
+        setMoves(movesPayload.moves)
+      }
+    } else {
+      setMoves([])
+    }
+  }, [gameId])
 
   async function sendChat() {
     if (!gameId || !chatInput.trim()) return
@@ -199,7 +207,7 @@ function App() {
     if (current && current !== humanId) {
       void doAiMove(current)
     }
-  }, [state?.current_player_id, gameId, isAiThinking])
+  }, [state, gameId, isAiThinking, doAiMove])
 
   const boardTiles = state?.board?.tiles || []
   const positions = state?.board?.positions || {}
