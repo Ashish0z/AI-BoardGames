@@ -289,9 +289,42 @@
   background: #0b1220;
 }
 
-.chat-log p {
-  margin: 0 0 8px;
+.chat-entry {
+  margin: 0 0 10px;
   font-size: 13px;
+}
+
+.chat-entry-role {
+  margin: 0 0 4px;
+}
+
+.chat-entry-body > *:first-child {
+  margin-top: 0;
+}
+
+.chat-entry-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.chat-entry-body p,
+.chat-entry-body ul,
+.chat-entry-body ol,
+.chat-entry-body pre,
+.chat-entry-body blockquote {
+  margin: 0 0 8px;
+}
+
+.chat-entry-body code {
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.chat-entry-body pre code {
+  display: block;
+  white-space: pre-wrap;
+  padding: 8px;
 }
 
 .chat-actions {

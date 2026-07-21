@@ -179,6 +179,25 @@ def apply_move(game_id: str, payload: MoveInput) -> Dict[str, object]:
 def apply_ai_move(game_id: str, player_id: str) -> Dict[str, object]:
     try:
         game = store.get(game_id)
+        available = game.available_moves(player_id)
+        if any(str(item.get("action")) == "roll_dice" for item in available):
+            auto_roll = Move(
+                player_id=player_id,
+                action="roll_dice",
+                payload={},
+                reason="Automatic turn-start roll",
+            )
+            state = game.apply_move(auto_roll)
+            debug_logger.debug(
+                "ai_auto_roll game_id=%s player_id=%s turn=%s last_event=%s",
+                game_id,
+                player_id,
+                state.metadata.get("turn"),
+                state.board.get("last_event"),
+            )
+            if state.current_player_id != player_id:
+                return {"move": auto_roll.__dict__, "state": state.__dict__}
+
         move = ai_service.choose_move(game, player_id)
         state = game.apply_move(move)
         debug_logger.debug(

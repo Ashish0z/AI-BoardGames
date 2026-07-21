@@ -44,10 +44,24 @@ class FrameworkTests(unittest.TestCase):
         game.state.board["ownership"]["3"] = "p1"
         game.state.board["properties_by_player"]["p1"].append(3)
 
+        game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="end_turn"))
         state = game.apply_move(Move(player_id="p2", action="roll_dice", payload={"die1": 1, "die2": 2}))
         self.assertEqual(state.board["money"]["p2"], 1496)
         self.assertEqual(state.board["money"]["p1"], 1504)
+
+    def test_end_turn_requires_roll_first(self):
+        game = MonopolyGame()
+        game.start(self.players)
+        with self.assertRaises(ValueError):
+            game.apply_move(Move(player_id="p1", action="end_turn"))
+
+    def test_end_turn_not_listed_before_roll(self):
+        game = MonopolyGame()
+        game.start(self.players)
+        actions = {move["action"] for move in game.available_moves("p1")}
+        self.assertIn("roll_dice", actions)
+        self.assertNotIn("end_turn", actions)
 
     def test_passing_go_awards_money(self):
         game = MonopolyGame()
@@ -71,6 +85,7 @@ class FrameworkTests(unittest.TestCase):
         game = MonopolyGame()
         game.start(self.players)
 
+        game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="offer_trade", payload={"to_player_id": "p2", "offer_cash": 100}))
         game.apply_move(Move(player_id="p1", action="end_turn"))
 
@@ -143,6 +158,7 @@ class FrameworkTests(unittest.TestCase):
         game.state.board["properties_by_player"]["p1"].append(3)
         game.state.board["mortgages"]["3"] = True
 
+        game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="end_turn"))
         state = game.apply_move(Move(player_id="p2", action="roll_dice", payload={"die1": 1, "die2": 2}))
         # p2 should pay no rent since property is mortgaged
@@ -171,6 +187,7 @@ class FrameworkTests(unittest.TestCase):
         game.state.board["properties_by_player"]["p1"] = [1, 3]
         game.state.board["monopolies_by_player"]["p1"] = ["brown"]
 
+        game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="end_turn"))
         p2_cash_before = int(game.state.board["money"]["p2"])
         state = game.apply_move(Move(player_id="p2", action="roll_dice", payload={"die1": 1, "die2": 2}))
@@ -217,6 +234,7 @@ class FrameworkTests(unittest.TestCase):
     def test_accept_trade_move_includes_offer_details(self):
         game = MonopolyGame()
         game.start(self.players)
+        game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="offer_trade", payload={"to_player_id": "p2", "offer_cash": 50}))
         game.apply_move(Move(player_id="p1", action="end_turn"))
         moves = game.available_moves("p2")
@@ -230,6 +248,7 @@ class FrameworkTests(unittest.TestCase):
         game.start(self.players)
         game.state.board["ownership"]["1"] = "p1"
         game.state.board["properties_by_player"]["p1"].append(1)
+        game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="offer_trade", payload={
             "to_player_id": "p2",
             "offer_cash": 0,

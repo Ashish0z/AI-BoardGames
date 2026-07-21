@@ -120,10 +120,12 @@ class MonopolyGame(BoardGame):
                 "properties": buildable,
             })
 
+        has_rolled = bool(self.state.metadata.get("has_rolled", False))
         moves.append({"action": "offer_trade", "description": "Offer a trade to another player"})
-        if not bool(self.state.metadata.get("has_rolled", False)):
+        if not has_rolled:
             moves.append({"action": "roll_dice", "description": "Roll and move forward"})
-        moves.append({"action": "end_turn", "description": "Finish your turn"})
+        if has_rolled:
+            moves.append({"action": "end_turn", "description": "Finish your turn"})
         return moves
 
     def apply_move(self, move: Move) -> GameState:
@@ -839,6 +841,9 @@ class MonopolyGame(BoardGame):
         pending = self.state.board["pending_action"]
         if pending and pending.get("player_id") == player_id:
             raise ValueError("Resolve pending action before ending turn")
+
+        if not bool(self.state.metadata.get("has_rolled", False)):
+            raise ValueError("You must roll before ending your turn")
 
         self._finish_turn()
 

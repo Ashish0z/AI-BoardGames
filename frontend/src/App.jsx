@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './App.css'
 
 const humanId = 'human-1'
@@ -636,9 +638,12 @@ function App() {
         <h2>Strategy Chat</h2>
         <div className="chat-log">
           {chat.map((entry, idx) => (
-            <p key={`${entry.role}-${idx}`}>
-              <strong>{entry.role}:</strong> {entry.text}
-            </p>
+            <div key={`${entry.role}-${idx}`} className="chat-entry">
+              <p className="chat-entry-role"><strong>{entry.role}:</strong></p>
+              <div className="chat-entry-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(entry.text || '')}</ReactMarkdown>
+              </div>
+            </div>
           ))}
         </div>
         <div className="chat-actions">
