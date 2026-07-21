@@ -31,7 +31,7 @@ class MonopolyGame(BoardGame):
             raise ValueError("Game has not started")
 
         if move.action == "roll_dice":
-            roll = int(move.payload.get("roll", randint(1, 6)))
+            roll = int(move.payload.get("roll", randint(1, 6) + randint(1, 6)))
             if roll < 1 or roll > 12:
                 raise ValueError("Invalid roll value")
             positions = self.state.board["positions"]

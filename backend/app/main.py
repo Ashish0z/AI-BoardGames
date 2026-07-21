@@ -30,7 +30,7 @@ class CreateGameInput(BaseModel):
 class MoveInput(BaseModel):
     player_id: str
     action: str
-    payload: Dict[str, object] = {}
+    payload: Dict[str, object] = Field(default_factory=dict)
     reason: str = ""
 
 

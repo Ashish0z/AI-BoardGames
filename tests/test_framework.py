@@ -26,6 +26,15 @@ class FrameworkTests(unittest.TestCase):
         self.assertEqual(state.board["positions"]["p1"], 5)
         self.assertEqual(state.current_player_id, "p2")
 
+    def test_passing_go_awards_money(self):
+        game = MonopolyGame()
+        game.start(self.players)
+        game.state.board["positions"]["p1"] = 39
+        game.state.board["money"]["p1"] = 1500
+        state = game.apply_move(Move(player_id="p1", action="roll_dice", payload={"roll": 2}))
+        self.assertEqual(state.board["positions"]["p1"], 1)
+        self.assertEqual(state.board["money"]["p1"], 1700)
+
     def test_store_can_retrieve_saved_game(self):
         game = MonopolyGame()
         state = game.start(self.players)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 from typing import Dict
 
 from ..core.base import BoardGame
@@ -41,7 +42,7 @@ class AdaptiveAIStrategyService:
             if not isinstance(payload, dict):
                 payload = {}
             return Move(player_id=player_id, action=action, payload=payload, reason=reason)
-        except Exception:
+        except (JSONDecodeError, TypeError, ValueError, RuntimeError):
             fallback = available[0]
             return Move(
                 player_id=player_id,
