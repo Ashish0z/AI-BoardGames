@@ -441,6 +441,8 @@ class MonopolyGame(BoardGame):
                 1 for ri in _COLOR_GROUPS["railroad"]
                 if ownership.get(str(ri)) == owner
             )
+            if owned_count == 0:
+                return 0
             return [25, 50, 100, 200][min(owned_count - 1, 3)]
 
         if tile_type == "utility":
@@ -650,7 +652,7 @@ class MonopolyGame(BoardGame):
                 continue
             tile = self._tile_by_index(idx)
             price = int(tile.get("price", 0))
-            unmortgage_cost = int(price * 0.55)  # 110% of 50% mortgage value
+            unmortgage_cost = self._unmortgage_cost(price)
             if cash >= unmortgage_cost:
                 result.append({
                     "index": idx,
@@ -658,6 +660,11 @@ class MonopolyGame(BoardGame):
                     "cost": unmortgage_cost,
                 })
         return result
+
+    @staticmethod
+    def _unmortgage_cost(price: int) -> int:
+        """Return the cost to unmortgage a property (110% of its mortgage value)."""
+        return int(price // 2 * 1.1)
 
     def _buildable_for(self, player_id: str) -> List[Dict[str, object]]:
         if not self.state:
@@ -735,7 +742,7 @@ class MonopolyGame(BoardGame):
             raise ValueError("Property is not mortgaged")
         tile = self._tile_by_index(idx)
         price = int(tile.get("price", 0))
-        unmortgage_cost = int(price * 0.55)
+        unmortgage_cost = self._unmortgage_cost(price)
         if int(self.state.board["money"][player_id]) < unmortgage_cost:
             raise ValueError("Insufficient funds to unmortgage")
         mortgages[str(idx)] = False

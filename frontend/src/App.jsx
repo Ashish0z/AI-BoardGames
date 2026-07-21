@@ -558,7 +558,9 @@ function App() {
 
               if (move.action === 'mortgage_property') {
                 const props = move.properties || []
-                const target = mortgageTarget || (props.length > 0 ? String(props[0].index) : '')
+                if (props.length === 0) return null
+                const target = mortgageTarget || String(props[0].index)
+                const targetIdx = Number(target)
                 return (
                   <div key="mortgage" className="action-form">
                     <select value={target} onChange={(e) => setMortgageTarget(e.target.value)}>
@@ -568,7 +570,7 @@ function App() {
                         </option>
                       ))}
                     </select>
-                    <button onClick={() => runMove('mortgage_property', { property_index: Number(target || props[0]?.index) })}>
+                    <button disabled={isNaN(targetIdx)} onClick={() => runMove('mortgage_property', { property_index: targetIdx })}>
                       Mortgage
                     </button>
                   </div>
@@ -577,7 +579,9 @@ function App() {
 
               if (move.action === 'unmortgage_property') {
                 const props = move.properties || []
-                const target = unmortgageTarget || (props.length > 0 ? String(props[0].index) : '')
+                if (props.length === 0) return null
+                const target = unmortgageTarget || String(props[0].index)
+                const targetIdx = Number(target)
                 return (
                   <div key="unmortgage" className="action-form">
                     <select value={target} onChange={(e) => setUnmortgageTarget(e.target.value)}>
@@ -587,7 +591,7 @@ function App() {
                         </option>
                       ))}
                     </select>
-                    <button onClick={() => runMove('unmortgage_property', { property_index: Number(target || props[0]?.index) })}>
+                    <button disabled={isNaN(targetIdx)} onClick={() => runMove('unmortgage_property', { property_index: targetIdx })}>
                       Unmortgage
                     </button>
                   </div>
@@ -596,7 +600,9 @@ function App() {
 
               if (move.action === 'buy_house') {
                 const props = move.properties || []
-                const target = buyHouseTarget || (props.length > 0 ? String(props[0].index) : '')
+                if (props.length === 0) return null
+                const target = buyHouseTarget || String(props[0].index)
+                const targetIdx = Number(target)
                 return (
                   <div key="buy_house" className="action-form">
                     <select value={target} onChange={(e) => setBuyHouseTarget(e.target.value)}>
@@ -606,7 +612,7 @@ function App() {
                         </option>
                       ))}
                     </select>
-                    <button onClick={() => runMove('buy_house', { property_index: Number(target || props[0]?.index) })}>
+                    <button disabled={isNaN(targetIdx)} onClick={() => runMove('buy_house', { property_index: targetIdx })}>
                       🏠 Build
                     </button>
                   </div>
