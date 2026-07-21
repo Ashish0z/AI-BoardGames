@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const humanId = 'human-1'
-const aiId = 'ai-1'
+const HUMAN_SKILL_LEVEL = 0.5
+const BASE_AI_SKILL_LEVEL = 0.6
+const AI_SKILL_INCREMENT = 0.1
+const MAX_AI_SKILL_LEVEL = 0.95
 
 function rollTwoDice() {
   return {
@@ -30,6 +33,11 @@ function positionToPercent(index, offset = 0) {
   return { left: `${x}%`, top: `${y}%` }
 }
 
+function getTileClassName(tile) {
+  const groupClass = tile.color_group ? ` tile-group-${String(tile.color_group).replace(/_/g, '-')}` : ''
+  return `tile tile-${tile.type}${groupClass}`
+}
+
 function App() {
   const [games, setGames] = useState([
     { key: 'monopoly', label: 'Monopoly', enabled: true },
@@ -44,10 +52,22 @@ function App() {
   const [chat, setChat] = useState([])
   const [chatInput, setChatInput] = useState('')
   const [status, setStatus] = useState('Ready')
-  const [tradeTarget, setTradeTarget] = useState(aiId)
+  const [tradeTarget, setTradeTarget] = useState('ai-1')
   const [tradeOfferCash, setTradeOfferCash] = useState(100)
+  const [aiCount, setAiCount] = useState(1)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [coachPrompt, setCoachPrompt] = useState('')
+  const [isAiThinking, setIsAiThinking] = useState(false)
 
   const players = useMemo(() => state?.players || [], [state])
+  const aiPlayers = useMemo(() => players.filter((player) => !player.is_human), [players])
+
+  useEffect(() => {
+    if (!aiPlayers.length) return
+    if (!aiPlayers.find((player) => player.id === tradeTarget)) {
+      setTradeTarget(aiPlayers[0].id)
+    }
+  }, [aiPlayers, tradeTarget])
 
   async function loadGameTypes() {
     try {
@@ -61,15 +81,24 @@ function App() {
 
   async function createGame() {
     setStatus('Creating game...')
+    const selectedAiCount = Math.max(1, Number(aiCount) || 1)
+    const configuredPlayers = [
+      { id: humanId, name: 'You', is_human: true, skill_level: HUMAN_SKILL_LEVEL },
+      ...Array.from({ length: selectedAiCount }, (_, idx) => ({
+        id: `ai-${idx + 1}`,
+        name: `AI ${idx + 1}`,
+        is_human: false,
+        skill_level: Math.min(MAX_AI_SKILL_LEVEL, BASE_AI_SKILL_LEVEL + idx * AI_SKILL_INCREMENT),
+      })),
+    ]
     const response = await fetch('/games', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         game_type: selectedGame,
-        players: [
-          { id: humanId, name: 'You', is_human: true, skill_level: 0.5 },
-          { id: aiId, name: 'AI', is_human: false, skill_level: 0.7 },
-        ],
+        players: configuredPlayers,
+        ai_prompt: aiPrompt.trim() || undefined,
+        coach_prompt: coachPrompt.trim() || undefined,
       }),
     })
     const payload = await response.json()
@@ -79,13 +108,15 @@ function App() {
     }
     setGameId(payload.game_id)
     setState(payload.state)
+    setAiPrompt(payload.state?.metadata?.ai_prompt || aiPrompt)
+    setCoachPrompt(payload.state?.metadata?.coach_prompt || coachPrompt)
     setStatus('Game created')
-    await refreshMoves(payload.game_id)
+    await refreshMoves(payload.game_id, payload.state)
   }
 
-  async function refreshMoves(id = gameId) {
-    if (!id || !state) return
-    const current = state.current_player_id
+  async function refreshMoves(id = gameId, gameState = state) {
+    if (!id || !gameState) return
+    const current = gameState.current_player_id
     if (current !== humanId) {
       setMoves([])
       return
@@ -120,18 +151,30 @@ function App() {
     }
   }
 
-  async function doAiMove() {
-    if (!gameId) return
-    const response = await fetch(`/games/${gameId}/ai-move?player_id=${aiId}`, { method: 'POST' })
+  const doAiMove = useCallback(async (playerId) => {
+    if (!gameId || !playerId || playerId === humanId) return
+    setIsAiThinking(true)
+    setStatus(`AI ${playerId} is thinking...`)
+    const response = await fetch(`/games/${gameId}/ai-move?player_id=${playerId}`, { method: 'POST' })
     const body = await response.json()
     if (!response.ok) {
+      setIsAiThinking(false)
       setStatus(body.detail || 'AI move failed')
       return
     }
     setState(body.state)
     setStatus(`AI played: ${body.move.action}`)
-    await refreshMoves(gameId)
-  }
+    setIsAiThinking(false)
+    if (body.state.current_player_id === humanId) {
+      const movesResponse = await fetch(`/games/${gameId}/moves/${humanId}`)
+      const movesPayload = await movesResponse.json()
+      if (movesResponse.ok) {
+        setMoves(movesPayload.moves)
+      }
+    } else {
+      setMoves([])
+    }
+  }, [gameId])
 
   async function sendChat() {
     if (!gameId || !chatInput.trim()) return
@@ -148,8 +191,42 @@ function App() {
     setChat((current) => [...current, { role: 'Coach', text: payload.answer || payload.detail || 'No response' }])
   }
 
+  async function updatePrompts() {
+    if (!gameId) return
+    const response = await fetch(`/games/${gameId}/prompts`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ai_prompt: aiPrompt,
+        coach_prompt: coachPrompt,
+      }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      setStatus(payload.detail || 'Unable to update prompts')
+      return
+    }
+    setState(payload.state)
+    setStatus('Prompts updated for current game')
+  }
+
+  useEffect(() => {
+    if (!state || !gameId || isAiThinking) return
+    const current = state.current_player_id
+    if (current && current !== humanId) {
+      doAiMove(current)
+    }
+  }, [state, gameId, isAiThinking, doAiMove])
+
   const boardTiles = state?.board?.tiles || []
   const positions = state?.board?.positions || {}
+  const currentPlayerId = state?.current_player_id
+  const currentTileIndex = currentPlayerId == null ? null : Number(positions[currentPlayerId] ?? 0)
+  const currentTile = currentTileIndex === null ? null : boardTiles.find((tile) => tile.index === currentTileIndex)
+  const currentTileOwnership = currentTile ? state?.board?.ownership?.[String(currentTile.index)] : null
+  const currentTileOwnerName = currentTileOwnership
+    ? players.find((player) => player.id === currentTileOwnership)?.name || currentTileOwnership
+    : null
 
   return (
     <div className="app-shell">
@@ -165,9 +242,28 @@ function App() {
             ))}
           </select>
         </label>
+        <label>
+          AI opponents
+          <select value={aiCount} onChange={(e) => setAiCount(Number(e.target.value))}>
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+          </select>
+        </label>
+        <label>
+          AI move prompt (per game)
+          <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={6} />
+        </label>
+        <label>
+          Coach prompt (per game)
+          <textarea value={coachPrompt} onChange={(e) => setCoachPrompt(e.target.value)} rows={3} />
+        </label>
         <button onClick={loadGameTypes}>Refresh Game List</button>
         <button onClick={createGame} disabled={!games.find((g) => g.key === selectedGame)?.enabled}>
           Start Game
+        </button>
+        <button onClick={updatePrompts} disabled={!gameId}>
+          Save Prompt Changes
         </button>
 
         <div className="status-box">
@@ -213,18 +309,27 @@ function App() {
               return (
                 <div
                   key={tile.index}
-                  className={`tile tile-${tile.type}`}
+                  className={getTileClassName(tile)}
                   style={{ gridRow: row + 1, gridColumn: col + 1 }}
                   title={`${tile.name} (${tile.type})`}
                 >
                   <span className="tile-index">{tile.index}</span>
                   <span className="tile-name">{tile.name}</span>
+                  <span className="tile-price">
+                    {tile.price ? `$${tile.price}` : tile.amount ? `Tax $${tile.amount}` : ''}
+                  </span>
                 </div>
               )
             })}
             <div className="board-center">
-              <strong>Monopoly</strong>
-              <p>Extensible engine + AI coach</p>
+              <strong>{currentTile?.name || 'Monopoly'}</strong>
+              <p className="center-subtitle">{currentTile ? `Tile #${currentTile.index} • ${currentTile.type}` : 'Start a game to view tile details'}</p>
+              {currentTile?.price ? <p>Cost: ${currentTile.price}</p> : null}
+              {currentTile?.house_cost ? <p>House cost: ${currentTile.house_cost}</p> : null}
+              {currentTile?.rent_tiers ? <p>Rent tiers: {currentTile.rent_tiers.join(' / ')}</p> : null}
+              {currentTileOwnerName ? <p>Owned by: {currentTileOwnerName}</p> : null}
+              {currentTile?.rule_text ? <p>Rule: {currentTile.rule_text}</p> : null}
+              {currentTile?.outcomes?.length ? <p>Possible outcomes: {currentTile.outcomes.join(' • ')}</p> : null}
             </div>
             {Object.entries(positions).map(([playerId, tileIndex], idx) => (
               <div
@@ -232,7 +337,7 @@ function App() {
                 className={`token ${playerId === humanId ? 'human' : 'ai'}`}
                 style={positionToPercent(Number(tileIndex), idx)}
               >
-                {playerId === humanId ? 'H' : 'A'}
+                {playerId === humanId ? 'H' : playerId.replace('ai-', 'A')}
               </div>
             ))}
           </div>
@@ -240,6 +345,7 @@ function App() {
 
         <section className="controls">
           <h3>Turn Controls</h3>
+          {isAiThinking ? <p className="ai-runner">🤖 AI is making a move...</p> : null}
           <div className="control-row">
             {moves.map((move) => {
               if (move.action === 'roll_dice') {
@@ -253,7 +359,11 @@ function App() {
                 return (
                   <div key={move.action} className="trade-form">
                     <select value={tradeTarget} onChange={(e) => setTradeTarget(e.target.value)}>
-                      <option value={aiId}>AI</option>
+                      {aiPlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.name}
+                        </option>
+                      ))}
                     </select>
                     <input
                       type="number"
@@ -273,7 +383,7 @@ function App() {
                 </button>
               )
             })}
-            <button onClick={doAiMove} disabled={state?.current_player_id !== aiId}>
+            <button onClick={() => doAiMove(state?.current_player_id)} disabled={!state?.current_player_id || state?.current_player_id === humanId || isAiThinking}>
               Run AI Turn
             </button>
           </div>

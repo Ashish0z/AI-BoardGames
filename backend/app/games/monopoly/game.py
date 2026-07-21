@@ -115,7 +115,7 @@ class MonopolyGame(BoardGame):
         return self.state
 
     def _build_tiles(self) -> List[Dict[str, object]]:
-        return [
+        tiles = [
             {"index": 0, "name": "GO", "type": "go"},
             {"index": 1, "name": "Mediterranean Avenue", "type": "property", "price": 60, "rent": 2},
             {"index": 2, "name": "Community Chest", "type": "community_chest"},
@@ -157,6 +157,100 @@ class MonopolyGame(BoardGame):
             {"index": 38, "name": "Luxury Tax", "type": "tax", "amount": 100},
             {"index": 39, "name": "Boardwalk", "type": "property", "price": 400, "rent": 50},
         ]
+        color_group_by_index = {
+            1: "brown",
+            3: "brown",
+            6: "light_blue",
+            8: "light_blue",
+            9: "light_blue",
+            11: "pink",
+            13: "pink",
+            14: "pink",
+            16: "orange",
+            18: "orange",
+            19: "orange",
+            21: "red",
+            23: "red",
+            24: "red",
+            26: "yellow",
+            27: "yellow",
+            29: "yellow",
+            31: "green",
+            32: "green",
+            34: "green",
+            37: "dark_blue",
+            39: "dark_blue",
+        }
+        house_cost_by_group = {
+            "brown": 50,
+            "light_blue": 50,
+            "pink": 100,
+            "orange": 100,
+            "red": 150,
+            "yellow": 150,
+            "green": 200,
+            "dark_blue": 200,
+        }
+        rent_tiers_by_index = {
+            1: [2, 10, 30, 90, 160, 250],
+            3: [4, 20, 60, 180, 320, 450],
+            6: [6, 30, 90, 270, 400, 550],
+            8: [6, 30, 90, 270, 400, 550],
+            9: [8, 40, 100, 300, 450, 600],
+            11: [10, 50, 150, 450, 625, 750],
+            13: [10, 50, 150, 450, 625, 750],
+            14: [12, 60, 180, 500, 700, 900],
+            16: [14, 70, 200, 550, 750, 950],
+            18: [14, 70, 200, 550, 750, 950],
+            19: [16, 80, 220, 600, 800, 1000],
+            21: [18, 90, 250, 700, 875, 1050],
+            23: [18, 90, 250, 700, 875, 1050],
+            24: [20, 100, 300, 750, 925, 1100],
+            26: [22, 110, 330, 800, 975, 1150],
+            27: [22, 110, 330, 800, 975, 1150],
+            29: [24, 120, 360, 850, 1025, 1200],
+            31: [26, 130, 390, 900, 1100, 1275],
+            32: [26, 130, 390, 900, 1100, 1275],
+            34: [28, 150, 450, 1000, 1200, 1400],
+            37: [35, 175, 500, 1100, 1300, 1500],
+            39: [50, 200, 600, 1400, 1700, 2000],
+        }
+        chance_rules = {
+            "rule_text": "Draw the next Chance card and apply it immediately.",
+            "outcomes": [str(card["message"]) for card in self._chance_cards],
+        }
+        community_rules = {
+            "rule_text": "Draw the next Community Chest card and apply it immediately.",
+            "outcomes": [str(card["message"]) for card in self._community_cards],
+        }
+
+        for tile in tiles:
+            tile_type = str(tile.get("type", ""))
+            idx = int(tile["index"])
+            if tile_type == "property" and idx in color_group_by_index:
+                group = color_group_by_index[idx]
+                tile["color_group"] = group
+                tile["house_cost"] = house_cost_by_group[group]
+                fallback_rent = tile.get("rent", 0)
+                try:
+                    fallback_base_rent = int(fallback_rent)
+                except (TypeError, ValueError):
+                    fallback_base_rent = 0
+                tile["rent_tiers"] = rent_tiers_by_index.get(idx, [fallback_base_rent])
+            elif tile_type == "railroad":
+                tile["color_group"] = "railroad"
+                tile["rent_tiers"] = [25, 50, 100, 200]
+                tile["rule_text"] = "Rent depends on how many railroads are owned."
+            elif tile_type == "utility":
+                tile["color_group"] = "utility"
+                tile["rule_text"] = "Standard rule: rent is based on dice roll and utility count."
+            elif tile_type == "chance":
+                tile.update(chance_rules)
+            elif tile_type == "community_chest":
+                tile.update(community_rules)
+            elif tile_type == "tax":
+                tile["rule_text"] = "Pay the listed tax amount immediately."
+        return tiles
 
     def _handle_roll(self, move: Move) -> None:
         if not self.state:

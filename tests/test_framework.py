@@ -3,6 +3,7 @@ import unittest
 from backend.app.core.models import Move, PlayerProfile
 from backend.app.core.store import InMemoryGameStore
 from backend.app.games.monopoly.game import MonopolyGame
+from backend.app.main import CreateGameInput, PlayerInput, create_game
 
 
 class FrameworkTests(unittest.TestCase):
@@ -84,6 +85,32 @@ class FrameworkTests(unittest.TestCase):
         store.save(game)
         loaded = store.get(state.game_id)
         self.assertEqual(loaded.state.game_id, state.game_id)
+
+    def test_monopoly_tiles_include_group_and_rules_metadata(self):
+        game = MonopolyGame()
+        state = game.start(self.players)
+        mediterranean = state.board["tiles"][1]
+        chance = state.board["tiles"][7]
+        self.assertEqual(mediterranean["color_group"], "brown")
+        self.assertEqual(mediterranean["house_cost"], 50)
+        self.assertTrue(mediterranean["rent_tiers"])
+        self.assertIn("rule_text", chance)
+        self.assertTrue(chance["outcomes"])
+
+    def test_create_game_stores_prompt_overrides(self):
+        payload = CreateGameInput(
+            game_type="monopoly",
+            players=[
+                PlayerInput(id="p1", name="Human", is_human=True, skill_level=0.5),
+                PlayerInput(id="p2", name="AI", is_human=False, skill_level=0.7),
+            ],
+            ai_prompt="custom ai prompt",
+            coach_prompt="custom coach prompt",
+        )
+        created = create_game(payload)
+        metadata = created["state"]["metadata"]
+        self.assertEqual(metadata["ai_prompt"], "custom ai prompt")
+        self.assertEqual(metadata["coach_prompt"], "custom coach prompt")
 
 
 if __name__ == "__main__":

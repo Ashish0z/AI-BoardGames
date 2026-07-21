@@ -8,7 +8,8 @@ A framework for local AI-powered board games, starting with Monopoly.
 - In-memory game state store and move validation flow.
 - Ollama-backed AI move selection service (adaptive to player skill level).
 - Ollama-backed coaching chat endpoint.
-- React/Vite web UI with sidebar settings, game selector buttons, Monopoly board rendering with token animations, and right-side strategy chat.
+- React/Vite web UI with Monopoly color groups, center tile details panel (cost/rent/rules), AI-count setup, AI turn runner, and strategy chat.
+- Per-game prompt overrides for AI move selection/coaching plus backend debug trace logging to `backend/logs/debug.log`.
 
 ## Project structure
 - `/backend/app/core`: abstract game models, base class, state store.
