@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 
@@ -9,7 +10,8 @@ def get_debug_logger() -> logging.Logger:
     if logger.handlers:
         return logger
 
-    log_dir = Path(__file__).resolve().parents[1] / "logs"
+    configured_dir = os.getenv("AI_BOARD_GAMES_LOG_DIR", "").strip()
+    log_dir = Path(configured_dir) if configured_dir else Path(__file__).resolve().parent.parent / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "debug.log"
 

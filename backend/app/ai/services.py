@@ -27,6 +27,7 @@ No extra text outside JSON.
 """.strip()
 
 DEFAULT_COACH_PROMPT = "You are a helpful Monopoly coach giving concise strategy guidance."
+MAX_LOG_RESPONSE_LENGTH = 500
 
 
 class AdaptiveAIStrategyService:
@@ -70,8 +71,14 @@ class AdaptiveAIStrategyService:
 
         try:
             raw = self.llm_client.chat(prompt)
-            self.logger.debug("ai_move_response game_id=%s player_id=%s response=%s", game.state.game_id, player_id, raw)
-            data: Dict[str, object] = json.loads(raw)
+            raw_text = raw if isinstance(raw, str) else str(raw)
+            self.logger.debug(
+                "ai_move_response game_id=%s player_id=%s response=%s",
+                game.state.game_id,
+                player_id,
+                raw_text[:MAX_LOG_RESPONSE_LENGTH],
+            )
+            data: Dict[str, object] = json.loads(raw_text)
             action = str(data.get("action", available[0]["action"]))
             payload = data.get("payload", {})
             reason = str(data.get("reason", ""))
@@ -118,6 +125,6 @@ class GameCoachService:
         self.logger.debug(
             "coach_response game_id=%s response=%s",
             game.state.game_id if game.state else "unknown",
-            response,
+            response[:MAX_LOG_RESPONSE_LENGTH],
         )
         return response

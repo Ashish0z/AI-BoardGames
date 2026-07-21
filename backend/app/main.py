@@ -113,10 +113,12 @@ def create_game(payload: CreateGameInput) -> Dict[str, object]:
             )
             for player in payload.players
         ])
-        if payload.ai_prompt and payload.ai_prompt.strip():
-            state.metadata["ai_prompt"] = payload.ai_prompt.strip()
-        if payload.coach_prompt and payload.coach_prompt.strip():
-            state.metadata["coach_prompt"] = payload.coach_prompt.strip()
+        ai_prompt = payload.ai_prompt.strip() if payload.ai_prompt else ""
+        coach_prompt = payload.coach_prompt.strip() if payload.coach_prompt else ""
+        if ai_prompt:
+            state.metadata["ai_prompt"] = ai_prompt
+        if coach_prompt:
+            state.metadata["coach_prompt"] = coach_prompt
         store.save(game)
         debug_logger.debug(
             "create_game game_id=%s game_type=%s players=%s",
@@ -216,7 +218,7 @@ def update_prompts(game_id: str, payload: PromptUpdateInput) -> Dict[str, object
     try:
         game = store.get(game_id)
         if not game.state:
-            raise ValueError("Game has not started")
+            raise ValueError("Cannot update prompts: game state not initialized")
         if payload.ai_prompt is not None:
             game.state.metadata["ai_prompt"] = payload.ai_prompt.strip()
         if payload.coach_prompt is not None:

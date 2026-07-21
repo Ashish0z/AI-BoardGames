@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const humanId = 'human-1'
+const HUMAN_SKILL_LEVEL = 0.5
+const BASE_AI_SKILL_LEVEL = 0.6
+const AI_SKILL_INCREMENT = 0.1
+const MAX_AI_SKILL_LEVEL = 0.95
 
 function rollTwoDice() {
   return {
@@ -27,6 +31,11 @@ function positionToPercent(index, offset = 0) {
   const x = col * step + step / 2 + (offset % 2) * 1.5
   const y = row * step + step / 2 + Math.floor(offset / 2) * 1.5
   return { left: `${x}%`, top: `${y}%` }
+}
+
+function getTileClassName(tile) {
+  const groupClass = tile.color_group ? ` tile-group-${String(tile.color_group).replace(/_/g, '-')}` : ''
+  return `tile tile-${tile.type}${groupClass}`
 }
 
 function App() {
@@ -74,12 +83,12 @@ function App() {
     setStatus('Creating game...')
     const selectedAiCount = Math.max(1, Number(aiCount) || 1)
     const configuredPlayers = [
-      { id: humanId, name: 'You', is_human: true, skill_level: 0.5 },
+      { id: humanId, name: 'You', is_human: true, skill_level: HUMAN_SKILL_LEVEL },
       ...Array.from({ length: selectedAiCount }, (_, idx) => ({
         id: `ai-${idx + 1}`,
         name: `AI ${idx + 1}`,
         is_human: false,
-        skill_level: Math.min(0.95, 0.6 + idx * 0.1),
+        skill_level: Math.min(MAX_AI_SKILL_LEVEL, BASE_AI_SKILL_LEVEL + idx * AI_SKILL_INCREMENT),
       })),
     ]
     const response = await fetch('/games', {
@@ -105,9 +114,9 @@ function App() {
     await refreshMoves(payload.game_id, payload.state)
   }
 
-  async function refreshMoves(id = gameId, nextState = state) {
-    if (!id || !nextState) return
-    const current = nextState.current_player_id
+  async function refreshMoves(id = gameId, gameState = state) {
+    if (!id || !gameState) return
+    const current = gameState.current_player_id
     if (current !== humanId) {
       setMoves([])
       return
@@ -205,14 +214,14 @@ function App() {
     if (!state || !gameId || isAiThinking) return
     const current = state.current_player_id
     if (current && current !== humanId) {
-      void doAiMove(current)
+      doAiMove(current)
     }
   }, [state, gameId, isAiThinking, doAiMove])
 
   const boardTiles = state?.board?.tiles || []
   const positions = state?.board?.positions || {}
   const currentPlayerId = state?.current_player_id
-  const currentTileIndex = currentPlayerId ? Number(positions[currentPlayerId] ?? 0) : null
+  const currentTileIndex = currentPlayerId == null ? null : Number(positions[currentPlayerId] ?? 0)
   const currentTile = currentTileIndex === null ? null : boardTiles.find((tile) => tile.index === currentTileIndex)
   const currentTileOwnership = currentTile ? state?.board?.ownership?.[String(currentTile.index)] : null
   const currentTileOwnerName = currentTileOwnership
@@ -300,7 +309,7 @@ function App() {
               return (
                 <div
                   key={tile.index}
-                  className={`tile tile-${tile.type}${tile.color_group ? ` tile-group-${String(tile.color_group).replaceAll('_', '-')}` : ''}`}
+                  className={getTileClassName(tile)}
                   style={{ gridRow: row + 1, gridColumn: col + 1 }}
                   title={`${tile.name} (${tile.type})`}
                 >

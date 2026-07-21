@@ -231,7 +231,12 @@ class MonopolyGame(BoardGame):
                 group = color_group_by_index[idx]
                 tile["color_group"] = group
                 tile["house_cost"] = house_cost_by_group[group]
-                tile["rent_tiers"] = rent_tiers_by_index.get(idx, [int(tile["rent"])])
+                fallback_rent = tile.get("rent", 0)
+                try:
+                    fallback_base_rent = int(fallback_rent)
+                except (TypeError, ValueError):
+                    fallback_base_rent = 0
+                tile["rent_tiers"] = rent_tiers_by_index.get(idx, [fallback_base_rent])
             elif tile_type == "railroad":
                 tile["color_group"] = "railroad"
                 tile["rent_tiers"] = [25, 50, 100, 200]
