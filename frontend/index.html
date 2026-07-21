@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Board Games</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+      .panel { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+      #chat-log { height: 260px; overflow-y: auto; border: 1px solid #eee; padding: 8px; margin-bottom: 10px; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>AI Board Games</h1>
+    <div class="layout">
+      <section class="panel">
+        <h2>Game</h2>
+        <button id="create">Create Monopoly Game</button>
+        <button id="human-roll">Human Roll</button>
+        <button id="ai-move">AI Move</button>
+        <pre id="state">No active game.</pre>
+      </section>
+      <section class="panel">
+        <h2>Chat Coach</h2>
+        <div id="chat-log"></div>
+        <input id="chat-input" placeholder="Ask strategy question" style="width: 100%;" />
+        <button id="chat-send">Send</button>
+      </section>
+    </div>
+
+    <script>
+      const api = "";
+      let gameId = null;
+      const stateEl = document.getElementById("state");
+      const chatLog = document.getElementById("chat-log");
+
+      function appendChat(role, message) {
+        const div = document.createElement("div");
+        div.textContent = `${role}: ${message}`;
+        chatLog.appendChild(div);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+
+      async function createGame() {
+        const res = await fetch(`${api}/games`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            game_type: "monopoly",
+            players: [
+              { id: "human-1", name: "You", is_human: true, skill_level: 0.5 },
+              { id: "ai-1", name: "AI", is_human: false, skill_level: 0.7 }
+            ]
+          })
+        });
+        const data = await res.json();
+        gameId = data.game_id;
+        stateEl.textContent = JSON.stringify(data.state, null, 2);
+      }
+
+      async function postMove(action, player_id) {
+        const res = await fetch(`${api}/games/${gameId}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, player_id, payload: {} })
+        });
+        const data = await res.json();
+        stateEl.textContent = JSON.stringify(data.state, null, 2);
+      }
+
+      async function aiMove() {
+        const res = await fetch(`${api}/games/${gameId}/ai-move?player_id=ai-1`, { method: "POST" });
+        const data = await res.json();
+        stateEl.textContent = JSON.stringify(data.state, null, 2);
+      }
+
+      async function sendChat() {
+        const input = document.getElementById("chat-input");
+        const message = input.value.trim();
+        if (!message || !gameId) return;
+        appendChat("You", message);
+        input.value = "";
+
+        const res = await fetch(`${api}/games/${gameId}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        appendChat("Coach", data.answer || data.detail);
+      }
+
+      document.getElementById("create").onclick = createGame;
+      document.getElementById("human-roll").onclick = () => gameId && postMove("roll_dice", "human-1");
+      document.getElementById("ai-move").onclick = () => gameId && aiMove();
+      document.getElementById("chat-send").onclick = sendChat;
+    </script>
+  </body>
+</html>
