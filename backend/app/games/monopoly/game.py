@@ -74,10 +74,35 @@ class MonopolyGame(BoardGame):
         pending = self.state.board["pending_action"]
         if pending and pending.get("player_id") == player_id:
             if pending.get("type") == "buy_or_skip":
-                return [
-                    {"action": "buy_property", "description": "Buy current property"},
-                    {"action": "skip_purchase", "description": "Skip property purchase"},
+                moves = [{"action": "skip_purchase", "description": "Skip property purchase and start an auction"}]
+                if int(self.state.board["money"][player_id]) >= int(pending.get("price", 0)):
+                    moves.insert(0, {"action": "buy_property", "description": "Buy current property"})
+                return moves
+            if pending.get("type") == "auction":
+                minimum_bid = int(pending.get("minimum_bid", 1))
+                tile_index = int(pending["tile_index"])
+                tile_name = str(self._tile_by_index(tile_index).get("name", f"Tile {tile_index}"))
+                moves = [
+                    {
+                        "action": "pass_auction",
+                        "description": "Pass on the current property auction",
+                        "tile_index": tile_index,
+                        "tile_name": tile_name,
+                        "highest_bid": int(pending.get("highest_bid", 0)),
+                        "highest_bidder_id": pending.get("highest_bidder_id"),
+                    }
                 ]
+                if int(self.state.board["money"][player_id]) >= minimum_bid:
+                    moves.insert(0, {
+                        "action": "place_bid",
+                        "description": "Place a bid in the current property auction",
+                        "tile_index": tile_index,
+                        "tile_name": tile_name,
+                        "minimum_bid": minimum_bid,
+                        "highest_bid": int(pending.get("highest_bid", 0)),
+                        "highest_bidder_id": pending.get("highest_bidder_id"),
+                    })
+                return moves
 
         responses = self._open_offers_for(player_id)
         if responses:
@@ -146,6 +171,10 @@ class MonopolyGame(BoardGame):
             self._handle_accept_trade(move)
         elif action == "decline_trade":
             self._handle_decline_trade(move)
+        elif action == "place_bid":
+            self._handle_place_bid(move)
+        elif action == "pass_auction":
+            self._handle_pass_auction(move)
         elif action == "mortgage_property":
             self._handle_mortgage(move)
         elif action == "unmortgage_property":
@@ -492,8 +521,19 @@ class MonopolyGame(BoardGame):
         pending = self.state.board["pending_action"]
         if not pending or pending.get("type") != "buy_or_skip" or pending.get("player_id") != player_id:
             raise ValueError("No property purchase is pending")
-        self.state.board["pending_action"] = None
-        self.state.board["last_event"] = f"{player_id} skipped purchase"
+        tile_index = int(pending["tile_index"])
+        tile_name = str(self._tile_by_index(tile_index)["name"])
+        self.state.board["pending_action"] = {
+            "type": "auction",
+            "player_id": player_id,
+            "origin_player_id": player_id,
+            "tile_index": tile_index,
+            "highest_bid": 0,
+            "highest_bidder_id": None,
+            "minimum_bid": 1,
+            "passed_players": [],
+        }
+        self.state.board["last_event"] = f"{player_id} skipped purchase; auction started for {tile_name}"
 
     def _handle_offer_trade(self, move: Move) -> None:
         if not self.state:
@@ -507,6 +547,8 @@ class MonopolyGame(BoardGame):
         known_player_ids = {player.id for player in self.state.players}
         if to_player_id not in known_player_ids:
             raise ValueError("Unknown trade target")
+        if any(offer["status"] == "open" for offer in self.state.board["trade_offers"]):
+            raise ValueError("A trade offer is already pending a response")
 
         offer = {
             "from_player_id": move.player_id,
@@ -516,8 +558,10 @@ class MonopolyGame(BoardGame):
             "offer_property": move.payload.get("offer_property"),
             "request_property": move.payload.get("request_property"),
             "status": "open",
+            "resume_player_id": move.player_id,
         }
         self.state.board["trade_offers"].append(offer)
+        self.state.current_player_id = to_player_id
         self.state.board["last_event"] = f"{move.player_id} offered trade to {to_player_id}"
 
     def _open_offers_for(self, player_id: str) -> List[Dict[str, object]]:
@@ -542,6 +586,7 @@ class MonopolyGame(BoardGame):
         accepter = str(offer["to_player_id"])
         self._apply_trade_transfer(proposer, accepter, offer)
         offer["status"] = "accepted"
+        self.state.current_player_id = str(offer.get("resume_player_id", proposer))
         self.state.board["last_event"] = f"{accepter} accepted trade from {proposer}"
 
     def _handle_decline_trade(self, move: Move) -> None:
@@ -555,6 +600,7 @@ class MonopolyGame(BoardGame):
             raise ValueError("Invalid trade offer index")
         offer = offers[offer_index]
         offer["status"] = "declined"
+        self.state.current_player_id = str(offer.get("resume_player_id", offer["from_player_id"]))
         self.state.board["last_event"] = f"{move.player_id} declined a trade offer"
 
     def _apply_trade_transfer(self, proposer: str, accepter: str, offer: Dict[str, object]) -> None:
@@ -588,6 +634,103 @@ class MonopolyGame(BoardGame):
             self.state.board["properties_by_player"][from_player].remove(idx)
         self.state.board["properties_by_player"][to_player].append(idx)
         self._update_monopolies()
+
+    def _handle_place_bid(self, move: Move) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        pending = self.state.board["pending_action"]
+        if not pending or pending.get("type") != "auction" or pending.get("player_id") != move.player_id:
+            raise ValueError("No auction bid is pending")
+
+        minimum_bid = int(pending.get("minimum_bid", 1))
+        bid_amount = int(move.payload.get("amount", minimum_bid))
+        if bid_amount < minimum_bid:
+            raise ValueError(f"Bid must be at least ${minimum_bid}")
+        if bid_amount > int(self.state.board["money"][move.player_id]):
+            raise ValueError("Insufficient funds for that bid")
+
+        pending["highest_bid"] = bid_amount
+        pending["highest_bidder_id"] = move.player_id
+        pending["minimum_bid"] = bid_amount + 1
+        pending["passed_players"] = [player_id for player_id in pending.get("passed_players", []) if player_id != move.player_id]
+        tile_name = str(self._tile_by_index(int(pending["tile_index"]))["name"])
+        self.state.board["last_event"] = f"{move.player_id} bid ${bid_amount} on {tile_name}"
+        self._advance_auction(move.player_id)
+
+    def _handle_pass_auction(self, move: Move) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        pending = self.state.board["pending_action"]
+        if not pending or pending.get("type") != "auction" or pending.get("player_id") != move.player_id:
+            raise ValueError("No auction decision is pending")
+
+        passed_players = list(pending.get("passed_players", []))
+        if move.player_id not in passed_players:
+            passed_players.append(move.player_id)
+        pending["passed_players"] = passed_players
+        tile_name = str(self._tile_by_index(int(pending["tile_index"]))["name"])
+        self.state.board["last_event"] = f"{move.player_id} passed on the auction for {tile_name}"
+        self._advance_auction(move.player_id)
+
+    def _advance_auction(self, acting_player_id: str) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        pending = self.state.board["pending_action"]
+        if not pending or pending.get("type") != "auction":
+            raise ValueError("No auction is active")
+
+        active_players = [player.id for player in self.state.players if player.id not in set(pending.get("passed_players", []))]
+        highest_bidder_id = pending.get("highest_bidder_id")
+        if highest_bidder_id and (
+            not active_players or (len(active_players) == 1 and active_players[0] == highest_bidder_id)
+        ):
+            self._complete_auction_sale(pending)
+            return
+        if not active_players:
+            self._complete_auction_without_sale(pending)
+            return
+
+        next_player_id = self._next_active_player(acting_player_id, active_players)
+        pending["player_id"] = next_player_id
+        self.state.current_player_id = next_player_id
+
+    def _complete_auction_sale(self, pending: Dict[str, object]) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        winner = str(pending["highest_bidder_id"])
+        bid_amount = int(pending["highest_bid"])
+        tile_index = int(pending["tile_index"])
+        tile_name = str(self._tile_by_index(tile_index)["name"])
+
+        self.state.board["money"][winner] = int(self.state.board["money"][winner]) - bid_amount
+        self.state.board["ownership"][str(tile_index)] = winner
+        self.state.board["properties_by_player"][winner].append(tile_index)
+        self.state.board["pending_action"] = None
+        self.state.current_player_id = str(pending["origin_player_id"])
+        self.state.board["last_event"] = f"{winner} won the auction for {tile_name} at ${bid_amount}"
+        self._update_monopolies()
+
+    def _complete_auction_without_sale(self, pending: Dict[str, object]) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        tile_name = str(self._tile_by_index(int(pending["tile_index"]))["name"])
+        self.state.board["pending_action"] = None
+        self.state.current_player_id = str(pending["origin_player_id"])
+        self.state.board["last_event"] = f"No one bought {tile_name} at auction"
+
+    def _next_active_player(self, current_player_id: str, active_player_ids: List[str]) -> str:
+        if not self.state:
+            raise ValueError("Game has not started")
+        ordered_ids = [player.id for player in self.state.players]
+        if current_player_id not in ordered_ids:
+            raise ValueError("Unknown player in auction flow")
+        start = ordered_ids.index(current_player_id)
+        active_set = set(active_player_ids)
+        for offset in range(1, len(ordered_ids) + 1):
+            candidate = ordered_ids[(start + offset) % len(ordered_ids)]
+            if candidate in active_set:
+                return candidate
+        raise ValueError("No active player found for auction")
 
     # ------------------------------------------------------------------
     # Monopoly detection helpers

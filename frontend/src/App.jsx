@@ -8,6 +8,8 @@ const HUMAN_SKILL_LEVEL = 0.5
 const BASE_AI_SKILL_LEVEL = 0.6
 const AI_SKILL_INCREMENT = 0.1
 const MAX_AI_SKILL_LEVEL = 0.95
+const EMPTY_ARRAY = []
+const EMPTY_OBJECT = {}
 
 function rollTwoDice() {
   return {
@@ -91,6 +93,8 @@ function App() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [coachPrompt, setCoachPrompt] = useState('')
   const [isAiThinking, setIsAiThinking] = useState(false)
+  const [selectedTileIndex, setSelectedTileIndex] = useState(null)
+  const [auctionBidAmount, setAuctionBidAmount] = useState(1)
 
   const players = useMemo(() => state?.players || [], [state])
   const aiPlayers = useMemo(() => players.filter((player) => !player.is_human), [players])
@@ -143,6 +147,8 @@ function App() {
     setState(payload.state)
     setAiPrompt(payload.state?.metadata?.ai_prompt || aiPrompt)
     setCoachPrompt(payload.state?.metadata?.coach_prompt || coachPrompt)
+    setSelectedTileIndex(null)
+    setAuctionBidAmount(1)
     setStatus('Game created')
     await refreshMoves(payload.game_id, payload.state)
   }
@@ -251,26 +257,36 @@ function App() {
     }
   }, [state, gameId, isAiThinking, doAiMove])
 
-  const boardTiles = state?.board?.tiles || []
-  const positions = state?.board?.positions || {}
-  const ownership = state?.board?.ownership || {}
-  const mortgages = state?.board?.mortgages || {}
-  const houses = state?.board?.houses || {}
-  const monopoliesByPlayer = state?.board?.monopolies_by_player || {}
-  const propertiesByPlayer = state?.board?.properties_by_player || {}
+  const boardTiles = state?.board?.tiles ?? EMPTY_ARRAY
+  const positions = state?.board?.positions ?? EMPTY_OBJECT
+  const ownership = state?.board?.ownership ?? EMPTY_OBJECT
+  const mortgages = state?.board?.mortgages ?? EMPTY_OBJECT
+  const houses = state?.board?.houses ?? EMPTY_OBJECT
+  const monopoliesByPlayer = state?.board?.monopolies_by_player ?? EMPTY_OBJECT
+  const propertiesByPlayer = state?.board?.properties_by_player ?? EMPTY_OBJECT
   const currentPlayerId = state?.current_player_id
   const currentTileIndex = currentPlayerId == null ? null : Number(positions[currentPlayerId] ?? 0)
-  const currentTile = currentTileIndex === null ? null : boardTiles.find((tile) => tile.index === currentTileIndex)
-  const currentTileOwnership = currentTile ? ownership[String(currentTile.index)] : null
-  const currentTileOwnerName = currentTileOwnership
-    ? players.find((player) => player.id === currentTileOwnership)?.name || currentTileOwnership
+  const activeTileIndex = selectedTileIndex ?? currentTileIndex
+  const activeTile = activeTileIndex === null ? null : boardTiles.find((tile) => tile.index === activeTileIndex)
+  const activeTileOwnership = activeTile ? ownership[String(activeTile.index)] : null
+  const activeTileOwnerName = activeTileOwnership
+    ? players.find((player) => player.id === activeTileOwnership)?.name || activeTileOwnership
     : null
+  const pendingAction = state?.board?.pending_action || null
 
   const tilesMap = useMemo(() => {
     const map = {}
     boardTiles.forEach((t) => { map[t.index] = t })
     return map
   }, [boardTiles])
+
+  useEffect(() => {
+    if (!pendingAction || pendingAction.type !== 'auction') {
+      setAuctionBidAmount(1)
+      return
+    }
+    setAuctionBidAmount(Math.max(1, Number(pendingAction.minimum_bid) || 1))
+  }, [pendingAction])
 
   return (
     <div className="app-shell">
@@ -357,7 +373,11 @@ function App() {
                         const group = tile.color_group
                         const isMonopoly = group && playerMonopolies.includes(group)
                         return (
-                          <li key={idx} className={`prop-item${isMortgaged ? ' prop-mortgaged' : ''}`}>
+                          <li
+                            key={idx}
+                            className={`prop-item${isMortgaged ? ' prop-mortgaged' : ''}${selectedTileIndex === tile.index ? ' prop-item-selected' : ''}`}
+                            onClick={() => setSelectedTileIndex(tile.index)}
+                          >
                             {group && (
                               <span
                                 className="prop-color-dot"
@@ -416,9 +436,10 @@ function App() {
               return (
                 <div
                   key={tile.index}
-                  className={getTileClassName(tile)}
+                  className={`${getTileClassName(tile)}${activeTileIndex === tile.index ? ' tile-selected' : ''}`}
                   style={{ gridRow: row + 1, gridColumn: col + 1 }}
                   title={tileTitle}
+                  onClick={() => setSelectedTileIndex(tile.index)}
                 >
                   <span className="tile-index">{tile.index}</span>
                   <span className="tile-name">{tile.name}</span>
@@ -446,14 +467,22 @@ function App() {
               )
             })}
             <div className="board-center">
-              <strong>{currentTile?.name || 'Monopoly'}</strong>
-              <p className="center-subtitle">{currentTile ? `Tile #${currentTile.index} • ${currentTile.type}` : 'Start a game to view tile details'}</p>
-              {currentTile?.price ? <p>Cost: ${currentTile.price}</p> : null}
-              {currentTile?.house_cost ? <p>House cost: ${currentTile.house_cost}</p> : null}
-              {currentTile?.rent_tiers ? <p>Rent tiers: {currentTile.rent_tiers.join(' / ')}</p> : null}
-              {currentTileOwnerName ? <p>Owned by: {currentTileOwnerName}</p> : null}
-              {currentTile?.rule_text ? <p>Rule: {currentTile.rule_text}</p> : null}
-              {currentTile?.outcomes?.length ? <p>Possible outcomes: {currentTile.outcomes.join(' • ')}</p> : null}
+              <strong>{activeTile?.name || 'Monopoly'}</strong>
+              <p className="center-subtitle">
+                {activeTile ? `Tile #${activeTile.index} • ${activeTile.type}` : 'Start a game to view tile details'}
+              </p>
+              {selectedTileIndex != null && activeTile ? <p className="center-note">Viewing selected tile</p> : null}
+              {activeTile?.price ? <p>Cost: ${activeTile.price}</p> : null}
+              {activeTile?.house_cost ? <p>House cost: ${activeTile.house_cost}</p> : null}
+              {activeTile?.rent_tiers ? <p>Rent tiers: {activeTile.rent_tiers.join(' / ')}</p> : null}
+              {activeTileOwnerName ? <p>Owned by: {activeTileOwnerName}</p> : null}
+              {activeTile?.rule_text ? <p>Rule: {activeTile.rule_text}</p> : null}
+              {activeTile?.outcomes?.length ? <p>Possible outcomes: {activeTile.outcomes.join(' • ')}</p> : null}
+              {selectedTileIndex != null ? (
+                <button type="button" onClick={() => setSelectedTileIndex(null)}>
+                  Back to current turn
+                </button>
+              ) : null}
             </div>
             {Object.entries(positions).map(([playerId, tileIndex], idx) => (
               <div
@@ -497,6 +526,39 @@ function App() {
                     <div className="trade-respond-row">
                       <button className="btn-accept" onClick={() => runMove('accept_trade', { offer_index: 0 })}>✓ Accept</button>
                       <button className="btn-decline" onClick={() => runMove('decline_trade', { offer_index: 0 })}>✕ Decline</button>
+                    </div>
+                  </div>
+                )
+              }
+
+              if (move.action === 'place_bid' || move.action === 'pass_auction') {
+                const minimumBid = Math.max(1, Number(move.minimum_bid) || 1)
+                const highestBid = Number(move.highest_bid) || 0
+                const highestBidder = move.highest_bidder_id
+                  ? players.find((p) => p.id === move.highest_bidder_id)?.name || move.highest_bidder_id
+                  : 'No bids yet'
+                const effectiveBid = Math.max(minimumBid, Number(auctionBidAmount) || minimumBid)
+                return (
+                  <div key="auction_bid" className="auction-panel">
+                    <p className="auction-title"><strong>{move.tile_name}</strong> is up for auction</p>
+                    <p className="auction-meta">Current high bid: {highestBid > 0 ? `$${highestBid}` : 'None'} · Leader: {highestBidder}</p>
+                    <div className="auction-actions">
+                      {move.action === 'place_bid' ? (
+                        <>
+                          <input
+                            type="number"
+                            min={minimumBid}
+                            value={auctionBidAmount}
+                            onChange={(e) => setAuctionBidAmount(Math.max(minimumBid, Number(e.target.value) || minimumBid))}
+                          />
+                          <button type="button" onClick={() => runMove('place_bid', { amount: effectiveBid })}>
+                            Bid ${effectiveBid}
+                          </button>
+                        </>
+                      ) : null}
+                      <button type="button" onClick={() => runMove('pass_auction')}>
+                        Pass
+                      </button>
                     </div>
                   </div>
                 )

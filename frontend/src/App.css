@@ -114,6 +114,12 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  cursor: pointer;
+}
+
+.tile-selected {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8;
 }
 
 .tile-index {
@@ -201,6 +207,10 @@
 
 .center-subtitle {
   color: #cbd5e1;
+}
+
+.center-note {
+  color: #38bdf8;
 }
 
 .token {
@@ -456,6 +466,11 @@
   padding: 2px 4px;
   border-radius: 4px;
   background: #111827;
+  cursor: pointer;
+}
+
+.prop-item-selected {
+  outline: 1px solid #38bdf8;
 }
 
 .prop-item.prop-mortgaged {
@@ -611,5 +626,39 @@
   color: #fca5a5;
   padding: 6px 12px;
   cursor: pointer;
+  font: inherit;
+}
+
+.auction-panel {
+  padding: 10px;
+  background: #0b1220;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  min-width: 220px;
+}
+
+.auction-title,
+.auction-meta {
+  margin: 0 0 8px;
+}
+
+.auction-meta {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.auction-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.auction-actions input {
+  width: 96px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #e2e8f0;
   font: inherit;
 }

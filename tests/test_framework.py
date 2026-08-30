@@ -87,11 +87,12 @@ class FrameworkTests(unittest.TestCase):
 
         game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="offer_trade", payload={"to_player_id": "p2", "offer_cash": 100}))
-        game.apply_move(Move(player_id="p1", action="end_turn"))
+        self.assertEqual(game.state.current_player_id, "p2")
 
         state = game.apply_move(Move(player_id="p2", action="accept_trade", payload={"offer_index": 0}))
         self.assertEqual(state.board["money"]["p1"], 1400)
         self.assertEqual(state.board["money"]["p2"], 1600)
+        self.assertEqual(state.current_player_id, "p1")
 
     def test_store_can_retrieve_saved_game(self):
         game = MonopolyGame()
@@ -236,7 +237,6 @@ class FrameworkTests(unittest.TestCase):
         game.start(self.players)
         game.state.metadata["has_rolled"] = True
         game.apply_move(Move(player_id="p1", action="offer_trade", payload={"to_player_id": "p2", "offer_cash": 50}))
-        game.apply_move(Move(player_id="p1", action="end_turn"))
         moves = game.available_moves("p2")
         accept_move = next((m for m in moves if m["action"] == "accept_trade"), None)
         self.assertIsNotNone(accept_move)
@@ -254,11 +254,47 @@ class FrameworkTests(unittest.TestCase):
             "offer_cash": 0,
             "offer_property": 1,
         }))
-        game.apply_move(Move(player_id="p1", action="end_turn"))
         state = game.apply_move(Move(player_id="p2", action="accept_trade", payload={"offer_index": 0}))
         self.assertEqual(state.board["ownership"]["1"], "p2")
         self.assertIn(1, state.board["properties_by_player"]["p2"])
         self.assertNotIn(1, state.board["properties_by_player"]["p1"])
+
+    def test_skip_purchase_starts_auction(self):
+        game = MonopolyGame()
+        game.start(self.players)
+        game.apply_move(Move(player_id="p1", action="roll_dice", payload={"die1": 1, "die2": 2}))
+
+        state = game.apply_move(Move(player_id="p1", action="skip_purchase"))
+        pending = state.board["pending_action"]
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending["type"], "auction")
+        self.assertEqual(state.current_player_id, "p1")
+
+    def test_auction_can_transfer_property_to_other_player(self):
+        game = MonopolyGame()
+        game.start(self.players)
+        game.apply_move(Move(player_id="p1", action="roll_dice", payload={"die1": 1, "die2": 2}))
+        game.apply_move(Move(player_id="p1", action="skip_purchase"))
+
+        game.apply_move(Move(player_id="p1", action="pass_auction"))
+        state = game.apply_move(Move(player_id="p2", action="place_bid", payload={"amount": 50}))
+
+        self.assertEqual(state.board["ownership"]["3"], "p2")
+        self.assertIn(3, state.board["properties_by_player"]["p2"])
+        self.assertEqual(state.board["money"]["p2"], 1450)
+        self.assertEqual(state.current_player_id, "p1")
+
+    def test_auction_without_bids_leaves_property_unowned(self):
+        game = MonopolyGame()
+        game.start(self.players)
+        game.apply_move(Move(player_id="p1", action="roll_dice", payload={"die1": 1, "die2": 2}))
+        game.apply_move(Move(player_id="p1", action="skip_purchase"))
+        game.apply_move(Move(player_id="p1", action="pass_auction"))
+
+        state = game.apply_move(Move(player_id="p2", action="pass_auction"))
+        self.assertNotIn("3", state.board["ownership"])
+        self.assertIsNone(state.board["pending_action"])
+        self.assertEqual(state.current_player_id, "p1")
 
 
 if __name__ == "__main__":
