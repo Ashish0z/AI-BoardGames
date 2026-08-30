@@ -548,7 +548,7 @@ class MonopolyGame(BoardGame):
         if to_player_id not in known_player_ids:
             raise ValueError("Unknown trade target")
         if any(offer["status"] == "open" for offer in self.state.board["trade_offers"]):
-            raise ValueError("Resolve the current trade offer before making another one")
+            raise ValueError("A trade offer is already pending a response")
 
         offer = {
             "from_player_id": move.player_id,
@@ -663,6 +663,8 @@ class MonopolyGame(BoardGame):
         pending = self.state.board["pending_action"]
         if not pending or pending.get("type") != "auction" or pending.get("player_id") != move.player_id:
             raise ValueError("No auction decision is pending")
+        if pending.get("highest_bidder_id") == move.player_id:
+            raise ValueError("Current highest bidder cannot pass")
 
         passed_players = list(pending.get("passed_players", []))
         if move.player_id not in passed_players:

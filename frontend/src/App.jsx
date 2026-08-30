@@ -537,6 +537,7 @@ function App() {
                 const highestBidder = move.highest_bidder_id
                   ? players.find((p) => p.id === move.highest_bidder_id)?.name || move.highest_bidder_id
                   : 'No bids yet'
+                const effectiveBid = Math.max(minimumBid, Number(auctionBidAmount) || minimumBid)
                 return (
                   <div key="auction_bid" className="auction-panel">
                     <p className="auction-title"><strong>{move.tile_name}</strong> is up for auction</p>
@@ -548,8 +549,8 @@ function App() {
                         value={auctionBidAmount}
                         onChange={(e) => setAuctionBidAmount(Number(e.target.value))}
                       />
-                      <button onClick={() => runMove('place_bid', { amount: Math.max(minimumBid, Number(auctionBidAmount) || minimumBid) })}>
-                        Bid ${Math.max(minimumBid, Number(auctionBidAmount) || minimumBid)}
+                      <button onClick={() => runMove('place_bid', { amount: effectiveBid })}>
+                        Bid ${effectiveBid}
                       </button>
                       <button onClick={() => runMove('pass_auction')}>
                         Pass
