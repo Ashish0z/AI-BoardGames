@@ -531,7 +531,7 @@ function App() {
                 )
               }
 
-              if (move.action === 'place_bid') {
+              if (move.action === 'place_bid' || move.action === 'pass_auction') {
                 const minimumBid = Math.max(1, Number(move.minimum_bid) || 1)
                 const highestBid = Number(move.highest_bid) || 0
                 const highestBidder = move.highest_bidder_id
@@ -543,25 +543,25 @@ function App() {
                     <p className="auction-title"><strong>{move.tile_name}</strong> is up for auction</p>
                     <p className="auction-meta">Current high bid: {highestBid > 0 ? `$${highestBid}` : 'None'} · Leader: {highestBidder}</p>
                     <div className="auction-actions">
-                      <input
-                        type="number"
-                        min={minimumBid}
-                        value={auctionBidAmount}
-                        onChange={(e) => setAuctionBidAmount(Number(e.target.value))}
-                      />
-                      <button type="button" onClick={() => runMove('place_bid', { amount: effectiveBid })}>
-                        Bid ${effectiveBid}
-                      </button>
+                      {move.action === 'place_bid' ? (
+                        <>
+                          <input
+                            type="number"
+                            min={minimumBid}
+                            value={auctionBidAmount}
+                            onChange={(e) => setAuctionBidAmount(Number(e.target.value))}
+                          />
+                          <button type="button" onClick={() => runMove('place_bid', { amount: effectiveBid })}>
+                            Bid ${effectiveBid}
+                          </button>
+                        </>
+                      ) : null}
                       <button type="button" onClick={() => runMove('pass_auction')}>
                         Pass
                       </button>
                     </div>
                   </div>
                 )
-              }
-
-              if (move.action === 'pass_auction') {
-                return null
               }
 
               if (move.action === 'decline_trade') {
