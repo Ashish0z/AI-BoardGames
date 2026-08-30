@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -62,7 +63,11 @@ app.add_middleware(
 )
 
 store = InMemoryGameStore()
-llm_client = OllamaClient()
+llm_client = OllamaClient(
+    timeout=float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "30")),
+    max_retries=int(os.environ.get("OLLAMA_MAX_RETRIES", "3")),
+    retry_backoff_seconds=float(os.environ.get("OLLAMA_RETRY_BACKOFF_SECONDS", "1")),
+)
 ai_service = AdaptiveAIStrategyService(llm_client)
 coach_service = GameCoachService(llm_client)
 debug_logger = get_debug_logger()

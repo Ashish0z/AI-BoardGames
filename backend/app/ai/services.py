@@ -28,6 +28,7 @@ No extra text outside JSON.
 
 DEFAULT_COACH_PROMPT = "You are a helpful Monopoly coach giving concise strategy guidance."
 MAX_LOG_RESPONSE_LENGTH = 500
+MAX_MOVE_ATTEMPTS = 3
 
 
 class AdaptiveAIStrategyService:
@@ -69,33 +70,47 @@ class AdaptiveAIStrategyService:
             prompt,
         )
 
-        try:
-            raw = self.llm_client.chat(prompt)
-            raw_text = raw if isinstance(raw, str) else str(raw)
-            self.logger.debug(
-                "ai_move_response game_id=%s player_id=%s response=%s",
-                game.state.game_id,
-                player_id,
-                raw_text[:MAX_LOG_RESPONSE_LENGTH],
-            )
-            data: Dict[str, object] = json.loads(raw_text)
-            action = str(data.get("action", available[0]["action"]))
-            payload = data.get("payload", {})
-            reason = str(data.get("reason", ""))
-            if action not in {move["action"] for move in available}:
-                action = str(available[0]["action"])
-            if not isinstance(payload, dict):
-                payload = {}
-            return Move(player_id=player_id, action=action, payload=payload, reason=reason)
-        except (JSONDecodeError, TypeError, ValueError, RuntimeError) as exc:
-            self.logger.debug("ai_move_fallback game_id=%s player_id=%s error=%s", game.state.game_id, player_id, exc)
-            fallback = available[0]
-            return Move(
-                player_id=player_id,
-                action=str(fallback["action"]),
-                payload={},
-                reason="Fallback move because LLM output was unavailable or invalid.",
-            )
+        last_error: Exception | None = None
+        for attempt in range(1, MAX_MOVE_ATTEMPTS + 1):
+            try:
+                raw = self.llm_client.chat(prompt)
+                raw_text = raw if isinstance(raw, str) else str(raw)
+                self.logger.debug(
+                    "ai_move_response game_id=%s player_id=%s attempt=%s response=%s",
+                    game.state.game_id,
+                    player_id,
+                    attempt,
+                    raw_text[:MAX_LOG_RESPONSE_LENGTH],
+                )
+                data: Dict[str, object] = json.loads(raw_text)
+                action = str(data.get("action", available[0]["action"]))
+                payload = data.get("payload", {})
+                reason = str(data.get("reason", ""))
+                if action not in {move["action"] for move in available}:
+                    action = str(available[0]["action"])
+                if not isinstance(payload, dict):
+                    payload = {}
+                return Move(player_id=player_id, action=action, payload=payload, reason=reason)
+            except (JSONDecodeError, TypeError, ValueError, RuntimeError) as exc:
+                last_error = exc
+                self.logger.debug(
+                    "ai_move_retry game_id=%s player_id=%s attempt=%s error=%s",
+                    game.state.game_id,
+                    player_id,
+                    attempt,
+                    exc,
+                )
+
+        self.logger.debug(
+            "ai_move_fallback game_id=%s player_id=%s error=%s", game.state.game_id, player_id, last_error
+        )
+        fallback = available[0]
+        return Move(
+            player_id=player_id,
+            action=str(fallback["action"]),
+            payload={},
+            reason="Fallback move because LLM output was unavailable or invalid.",
+        )
 
 
 class GameCoachService:
