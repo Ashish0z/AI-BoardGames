@@ -8,6 +8,8 @@ const HUMAN_SKILL_LEVEL = 0.5
 const BASE_AI_SKILL_LEVEL = 0.6
 const AI_SKILL_INCREMENT = 0.1
 const MAX_AI_SKILL_LEVEL = 0.95
+const EMPTY_ARRAY = []
+const EMPTY_OBJECT = {}
 
 function rollTwoDice() {
   return {
@@ -255,13 +257,13 @@ function App() {
     }
   }, [state, gameId, isAiThinking, doAiMove])
 
-  const boardTiles = state?.board?.tiles || []
-  const positions = state?.board?.positions || {}
-  const ownership = state?.board?.ownership || {}
-  const mortgages = state?.board?.mortgages || {}
-  const houses = state?.board?.houses || {}
-  const monopoliesByPlayer = state?.board?.monopolies_by_player || {}
-  const propertiesByPlayer = state?.board?.properties_by_player || {}
+  const boardTiles = state?.board?.tiles ?? EMPTY_ARRAY
+  const positions = state?.board?.positions ?? EMPTY_OBJECT
+  const ownership = state?.board?.ownership ?? EMPTY_OBJECT
+  const mortgages = state?.board?.mortgages ?? EMPTY_OBJECT
+  const houses = state?.board?.houses ?? EMPTY_OBJECT
+  const monopoliesByPlayer = state?.board?.monopolies_by_player ?? EMPTY_OBJECT
+  const propertiesByPlayer = state?.board?.properties_by_player ?? EMPTY_OBJECT
   const currentPlayerId = state?.current_player_id
   const currentTileIndex = currentPlayerId == null ? null : Number(positions[currentPlayerId] ?? 0)
   const activeTileIndex = selectedTileIndex ?? currentTileIndex
@@ -272,11 +274,11 @@ function App() {
     : null
   const pendingAction = state?.board?.pending_action || null
 
-  const tilesMap = (() => {
+  const tilesMap = useMemo(() => {
     const map = {}
     boardTiles.forEach((t) => { map[t.index] = t })
     return map
-  })()
+  }, [boardTiles])
 
   useEffect(() => {
     if (!pendingAction || pendingAction.type !== 'auction') {
@@ -373,8 +375,8 @@ function App() {
                         return (
                           <li
                             key={idx}
-                            className={`prop-item${isMortgaged ? ' prop-mortgaged' : ''}${selectedTileIndex === idx ? ' prop-item-selected' : ''}`}
-                            onClick={() => setSelectedTileIndex(idx)}
+                            className={`prop-item${isMortgaged ? ' prop-mortgaged' : ''}${selectedTileIndex === tile.index ? ' prop-item-selected' : ''}`}
+                            onClick={() => setSelectedTileIndex(tile.index)}
                           >
                             {group && (
                               <span
