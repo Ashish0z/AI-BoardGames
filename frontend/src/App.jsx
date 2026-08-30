@@ -294,6 +294,7 @@ function App() {
     setCoachPrompt(payload.state?.metadata?.coach_prompt || '')
     setSelectedTileIndex(null)
     setAuctionBidAmount(1)
+    setSellHouseTarget('')
     setStatus('Game loaded')
     await refreshMoves(payload.game_id, payload.state)
   }

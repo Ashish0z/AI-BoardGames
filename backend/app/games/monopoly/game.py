@@ -1096,6 +1096,8 @@ class MonopolyGame(BoardGame):
         if not self.state:
             raise ValueError("Game has not started")
         board = self.state.board
+        # Capture turn order before removal so we can find the next player correctly
+        ordered_ids = [p.id for p in self.state.players]
         # Return all properties to the bank
         for idx in list(board["properties_by_player"][player_id]):
             key = str(idx)
@@ -1122,9 +1124,16 @@ class MonopolyGame(BoardGame):
 
         # Advance to next player if it was the bankrupt player's turn
         if self.state.current_player_id == player_id:
-            if remaining:
-                # Find next player in original order — just pick first remaining
-                self.state.current_player_id = remaining[0]
+            remaining_set = set(remaining)
+            bankrupt_idx = ordered_ids.index(player_id)
+            n = len(ordered_ids)
+            next_player_id = None
+            for offset in range(1, n + 1):
+                candidate = ordered_ids[(bankrupt_idx + offset) % n]
+                if candidate in remaining_set:
+                    next_player_id = candidate
+                    break
+            self.state.current_player_id = next_player_id or remaining[0]
             self.state.metadata["has_rolled"] = False
 
     # ------------------------------------------------------------------
