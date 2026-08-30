@@ -264,7 +264,6 @@ function App() {
   const propertiesByPlayer = state?.board?.properties_by_player || {}
   const currentPlayerId = state?.current_player_id
   const currentTileIndex = currentPlayerId == null ? null : Number(positions[currentPlayerId] ?? 0)
-  const currentTile = currentTileIndex === null ? null : boardTiles.find((tile) => tile.index === currentTileIndex)
   const activeTileIndex = selectedTileIndex ?? currentTileIndex
   const activeTile = activeTileIndex === null ? null : boardTiles.find((tile) => tile.index === activeTileIndex)
   const activeTileOwnership = activeTile ? ownership[String(activeTile.index)] : null
@@ -273,11 +272,11 @@ function App() {
     : null
   const pendingAction = state?.board?.pending_action || null
 
-  const tilesMap = useMemo(() => {
+  const tilesMap = (() => {
     const map = {}
     boardTiles.forEach((t) => { map[t.index] = t })
     return map
-  }, [boardTiles])
+  })()
 
   useEffect(() => {
     if (!pendingAction || pendingAction.type !== 'auction') {
