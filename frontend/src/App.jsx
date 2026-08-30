@@ -549,7 +549,7 @@ function App() {
                             type="number"
                             min={minimumBid}
                             value={auctionBidAmount}
-                            onChange={(e) => setAuctionBidAmount(Number(e.target.value))}
+                            onChange={(e) => setAuctionBidAmount(Math.max(minimumBid, Number(e.target.value) || minimumBid))}
                           />
                           <button type="button" onClick={() => runMove('place_bid', { amount: effectiveBid })}>
                             Bid ${effectiveBid}

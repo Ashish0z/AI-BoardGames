@@ -663,8 +663,6 @@ class MonopolyGame(BoardGame):
         pending = self.state.board["pending_action"]
         if not pending or pending.get("type") != "auction" or pending.get("player_id") != move.player_id:
             raise ValueError("No auction decision is pending")
-        if pending.get("highest_bidder_id") == move.player_id:
-            raise ValueError("Current highest bidder cannot pass")
 
         passed_players = list(pending.get("passed_players", []))
         if move.player_id not in passed_players:
@@ -683,7 +681,9 @@ class MonopolyGame(BoardGame):
 
         active_players = [player.id for player in self.state.players if player.id not in set(pending.get("passed_players", []))]
         highest_bidder_id = pending.get("highest_bidder_id")
-        if highest_bidder_id and len(active_players) == 1 and active_players[0] == highest_bidder_id:
+        if highest_bidder_id and (
+            not active_players or (len(active_players) == 1 and active_players[0] == highest_bidder_id)
+        ):
             self._complete_auction_sale(pending)
             return
         if not active_players:
