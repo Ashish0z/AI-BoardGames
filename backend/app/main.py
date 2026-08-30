@@ -48,6 +48,10 @@ class PromptUpdateInput(BaseModel):
     coach_prompt: Optional[str] = None
 
 
+class SaveDataInput(BaseModel):
+    data: Dict[str, object]
+
+
 app = FastAPI(title="AI Board Games Backend")
 app.add_middleware(
     CORSMiddleware,
@@ -249,5 +253,33 @@ def update_prompts(game_id: str, payload: PromptUpdateInput) -> Dict[str, object
             bool(game.state.metadata.get("coach_prompt")),
         )
         return {"state": game.state.__dict__}
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/games/{game_id}/save")
+def save_game(game_id: str) -> Dict[str, object]:
+    try:
+        game = store.get(game_id)
+        if not hasattr(game, "to_save_dict"):
+            raise ValueError("This game type does not support saving")
+        return {"save_data": game.to_save_dict()}
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/games/load")
+def load_game(payload: SaveDataInput) -> Dict[str, object]:
+    try:
+        game_type = str(payload.data.get("state", {}).get("game_type", ""))
+        if game_type == "monopoly":
+            game = MonopolyGame.from_save_dict(payload.data)
+        else:
+            raise ValueError(f"Unsupported game type '{game_type}' for loading")
+        if not game.state:
+            raise ValueError("Loaded game has no state")
+        store.save(game)
+        debug_logger.debug("load_game game_id=%s game_type=%s", game.state.game_id, game_type)
+        return {"game_id": game.state.game_id, "state": game.state.__dict__}
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

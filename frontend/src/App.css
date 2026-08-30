@@ -662,3 +662,46 @@
   color: #e2e8f0;
   font: inherit;
 }
+
+.debt-warning {
+  background: #450a0a;
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  color: #fca5a5;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btn-forfeit {
+  border: 1px solid #7f1d1d;
+  border-radius: 8px;
+  background: #3b0a0a;
+  color: #f87171;
+  padding: 6px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.btn-forfeit:hover {
+  background: #500c0c;
+}
+
+.load-game-label {
+  display: inline-block;
+  cursor: pointer;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: #1e293b;
+  color: #94a3b8;
+  font: inherit;
+  text-align: center;
+}
+
+.load-game-label:hover {
+  background: #0f172a;
+  color: #e2e8f0;
+}

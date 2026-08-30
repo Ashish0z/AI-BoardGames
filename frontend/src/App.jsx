@@ -95,6 +95,7 @@ function App() {
   const [isAiThinking, setIsAiThinking] = useState(false)
   const [selectedTileIndex, setSelectedTileIndex] = useState(null)
   const [auctionBidAmount, setAuctionBidAmount] = useState(1)
+  const [sellHouseTarget, setSellHouseTarget] = useState('')
 
   const players = useMemo(() => state?.players || [], [state])
   const aiPlayers = useMemo(() => players.filter((player) => !player.is_human), [players])
@@ -249,6 +250,55 @@ function App() {
     setStatus('Prompts updated for current game')
   }
 
+  async function saveGame() {
+    if (!gameId) return
+    const response = await fetch(`/games/${gameId}/save`)
+    const payload = await response.json()
+    if (!response.ok) {
+      setStatus(payload.detail || 'Failed to save game')
+      return
+    }
+    const blob = new Blob([JSON.stringify(payload.save_data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'monopoly-save.json'
+    a.click()
+    URL.revokeObjectURL(url)
+    setStatus('Game saved')
+  }
+
+  async function loadGameFromFile(file) {
+    if (!file) return
+    const text = await file.text()
+    let data
+    try {
+      data = JSON.parse(text)
+    } catch {
+      setStatus('Invalid save file')
+      return
+    }
+    const response = await fetch('/games/load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      setStatus(payload.detail || 'Failed to load game')
+      return
+    }
+    setGameId(payload.game_id)
+    setState(payload.state)
+    setAiPrompt(payload.state?.metadata?.ai_prompt || '')
+    setCoachPrompt(payload.state?.metadata?.coach_prompt || '')
+    setSelectedTileIndex(null)
+    setAuctionBidAmount(1)
+    setSellHouseTarget('')
+    setStatus('Game loaded')
+    await refreshMoves(payload.game_id, payload.state)
+  }
+
   useEffect(() => {
     if (!state || !gameId || isAiThinking) return
     const current = state.current_player_id
@@ -325,6 +375,18 @@ function App() {
         <button onClick={updatePrompts} disabled={!gameId}>
           Save Prompt Changes
         </button>
+        <button onClick={saveGame} disabled={!gameId}>
+          💾 Save Game
+        </button>
+        <label className="load-game-label">
+          📂 Load Game
+          <input
+            type="file"
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={(e) => loadGameFromFile(e.target.files?.[0])}
+          />
+        </label>
 
         <div className="status-box">
           <h3>Status</h3>
@@ -499,6 +561,11 @@ function App() {
         <section className="controls">
           <h3>Turn Controls</h3>
           {isAiThinking ? <p className="ai-runner">🤖 AI is making a move...</p> : null}
+          {state?.board?.money?.[humanId] != null && Number(state.board.money[humanId]) < 0 && (
+            <div className="debt-warning">
+              ⚠️ You have a negative balance (${Number(state.board.money[humanId])}). You must mortgage properties, sell houses, offer trades, or forfeit before ending your turn.
+            </div>
+          )}
           <div className="control-row">
             {moves.map((move) => {
               if (move.action === 'roll_dice') {
@@ -680,6 +747,35 @@ function App() {
                       🏠 Build
                     </button>
                   </div>
+                )
+              }
+
+              if (move.action === 'sell_house') {
+                const props = move.properties || []
+                if (props.length === 0) return null
+                const target = sellHouseTarget || String(props[0].index)
+                const targetIdx = Number(target)
+                return (
+                  <div key="sell_house" className="action-form">
+                    <select value={target} onChange={(e) => setSellHouseTarget(e.target.value)}>
+                      {props.map((p) => (
+                        <option key={p.index} value={String(p.index)}>
+                          {p.name} (+${p.sell_value}, {p.current_houses} 🏠)
+                        </option>
+                      ))}
+                    </select>
+                    <button disabled={isNaN(targetIdx)} onClick={() => runMove('sell_house', { property_index: targetIdx })}>
+                      🏚 Sell House
+                    </button>
+                  </div>
+                )
+              }
+
+              if (move.action === 'forfeit') {
+                return (
+                  <button key="forfeit" className="btn-forfeit" onClick={() => runMove('forfeit')}>
+                    🏳 Forfeit (Bankruptcy)
+                  </button>
                 )
               }
 

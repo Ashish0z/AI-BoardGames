@@ -119,6 +119,27 @@ class MonopolyGame(BoardGame):
                 {"action": "end_turn", "description": "Stay in jail and end turn"},
             ]
 
+        # Debt resolution mode: player must raise funds or forfeit
+        if int(self.state.board["money"][player_id]) < 0:
+            moves: List[Dict[str, object]] = []
+            mortgageable = self._mortgageable_for(player_id)
+            if mortgageable:
+                moves.append({
+                    "action": "mortgage_property",
+                    "description": "Mortgage a property to raise cash",
+                    "properties": mortgageable,
+                })
+            sellable = self._sellable_houses_for(player_id)
+            if sellable:
+                moves.append({
+                    "action": "sell_house",
+                    "description": "Sell a house or hotel back to the bank",
+                    "properties": sellable,
+                })
+            moves.append({"action": "offer_trade", "description": "Offer a trade to raise cash"})
+            moves.append({"action": "forfeit", "description": "Declare bankruptcy and leave the game"})
+            return moves
+
         moves: List[Dict[str, object]] = []
 
         mortgageable = self._mortgageable_for(player_id)
@@ -143,6 +164,14 @@ class MonopolyGame(BoardGame):
                 "action": "buy_house",
                 "description": "Build a house or hotel on a monopoly property",
                 "properties": buildable,
+            })
+
+        sellable = self._sellable_houses_for(player_id)
+        if sellable:
+            moves.append({
+                "action": "sell_house",
+                "description": "Sell a house or hotel back to the bank",
+                "properties": sellable,
             })
 
         has_rolled = bool(self.state.metadata.get("has_rolled", False))
@@ -181,6 +210,10 @@ class MonopolyGame(BoardGame):
             self._handle_unmortgage(move)
         elif action == "buy_house":
             self._handle_buy_house(move)
+        elif action == "sell_house":
+            self._handle_sell_house(move)
+        elif action == "forfeit":
+            self._handle_forfeit(move.player_id)
         elif action == "pay_bail":
             self._handle_pay_bail(move.player_id)
         elif action == "end_turn":
@@ -985,6 +1018,12 @@ class MonopolyGame(BoardGame):
         if pending and pending.get("player_id") == player_id:
             raise ValueError("Resolve pending action before ending turn")
 
+        if int(self.state.board["money"][player_id]) < 0:
+            raise ValueError(
+                "You cannot end your turn with a negative balance. "
+                "Mortgage properties, sell houses, offer trades, or forfeit."
+            )
+
         if not bool(self.state.metadata.get("has_rolled", False)):
             raise ValueError("You must roll before ending your turn")
 
@@ -995,3 +1034,161 @@ class MonopolyGame(BoardGame):
             raise ValueError("Game has not started")
         self.state.metadata["has_rolled"] = False
         self._advance_turn()
+
+    def _sellable_houses_for(self, player_id: str) -> List[Dict[str, object]]:
+        """Return properties where the player can sell a house/hotel back to the bank."""
+        if not self.state:
+            return []
+        houses = self.state.board["houses"]
+        result = []
+        for idx in self.state.board["properties_by_player"][player_id]:
+            h = int(houses.get(str(idx), 0))
+            if h <= 0:
+                continue
+            tile = self._tile_by_index(idx)
+            group = tile.get("color_group")
+            if not group or group not in _BUILDABLE_GROUPS:
+                continue
+            group_indices = _BUILDABLE_GROUPS[group]
+            max_houses = max(int(houses.get(str(gi), 0)) for gi in group_indices)
+            # Even-sell rule: can only sell from properties at max level in group
+            if h < max_houses:
+                continue
+            house_cost = int(tile.get("house_cost", 0))
+            result.append({
+                "index": idx,
+                "name": str(tile["name"]),
+                "sell_value": house_cost // 2,
+                "current_houses": h,
+            })
+        return result
+
+    def _handle_sell_house(self, move: Move) -> None:
+        if not self.state:
+            raise ValueError("Game has not started")
+        idx = int(move.payload.get("property_index", -1))
+        if idx < 0:
+            raise ValueError("sell_house requires 'property_index'")
+        player_id = move.player_id
+        if idx not in self.state.board["properties_by_player"][player_id]:
+            raise ValueError("Player does not own this property")
+        tile = self._tile_by_index(idx)
+        group = tile.get("color_group")
+        if not group or group not in _BUILDABLE_GROUPS:
+            raise ValueError("Cannot sell houses on this property type")
+        houses = self.state.board["houses"]
+        current = int(houses.get(str(idx), 0))
+        if current <= 0:
+            raise ValueError("No houses to sell on this property")
+        group_indices = _BUILDABLE_GROUPS[group]
+        max_houses = max(int(houses.get(str(gi), 0)) for gi in group_indices)
+        if current < max_houses:
+            raise ValueError("Must sell evenly across colour group (even-sell rule)")
+        house_cost = int(tile.get("house_cost", 0))
+        sell_value = house_cost // 2
+        houses[str(idx)] = current - 1
+        self.state.board["money"][player_id] = int(self.state.board["money"][player_id]) + sell_value
+        label = "hotel" if current == 5 else "house"
+        self.state.board["last_event"] = f"{player_id} sold a {label} on {tile['name']} for ${sell_value}"
+
+    def _handle_forfeit(self, player_id: str) -> None:
+        """Declare the player bankrupt: strip assets, remove from game."""
+        if not self.state:
+            raise ValueError("Game has not started")
+        board = self.state.board
+        # Capture turn order before removal so we can find the next player correctly
+        ordered_ids = [p.id for p in self.state.players]
+        # Return all properties to the bank
+        for idx in list(board["properties_by_player"][player_id]):
+            key = str(idx)
+            board["ownership"].pop(key, None)
+            board["mortgages"].pop(key, None)
+            board["houses"].pop(key, None)
+        board["properties_by_player"][player_id] = []
+        board["money"][player_id] = 0
+        board["last_event"] = f"{player_id} has gone bankrupt and forfeited"
+        # Remove from players list
+        self.state.players = [p for p in self.state.players if p.id != player_id]
+        self._update_monopolies()
+        # Remove per-player board tracking for this player
+        for key in ("positions", "jail_turns", "monopolies_by_player", "properties_by_player"):
+            if player_id in board.get(key, {}):
+                del board[key][player_id]
+
+        remaining = [p.id for p in self.state.players]
+        if len(remaining) == 1:
+            self.state.metadata["winner"] = remaining[0]
+            self.state.metadata["game_over"] = True
+            self.state.board["last_event"] = f"{remaining[0]} wins the game!"
+            return
+
+        # Advance to next player if it was the bankrupt player's turn
+        if self.state.current_player_id == player_id:
+            remaining_set = set(remaining)
+            bankrupt_idx = ordered_ids.index(player_id)
+            n = len(ordered_ids)
+            next_player_id = None
+            for offset in range(1, n + 1):
+                candidate = ordered_ids[(bankrupt_idx + offset) % n]
+                if candidate in remaining_set:
+                    next_player_id = candidate
+                    break
+            self.state.current_player_id = next_player_id or remaining[0]
+            self.state.metadata["has_rolled"] = False
+
+    # ------------------------------------------------------------------
+    # Save / Load
+    # ------------------------------------------------------------------
+
+    def to_save_dict(self) -> Dict[str, object]:
+        """Serialize the full game to a plain dict suitable for JSON storage."""
+        if not self.state:
+            raise ValueError("Game has not started")
+        return {
+            "chance_index": self._chance_index,
+            "community_index": self._community_index,
+            "state": {
+                "game_id": self.state.game_id,
+                "game_type": self.state.game_type,
+                "current_player_id": self.state.current_player_id,
+                "players": [
+                    {
+                        "id": p.id,
+                        "name": p.name,
+                        "is_human": p.is_human,
+                        "skill_level": p.skill_level,
+                    }
+                    for p in self.state.players
+                ],
+                "board": self.state.board,
+                "metadata": self.state.metadata,
+                "move_log": self.state.move_log,
+            },
+        }
+
+    @classmethod
+    def from_save_dict(cls, data: Dict[str, object]) -> "MonopolyGame":
+        """Rebuild a MonopolyGame from a save dict produced by to_save_dict()."""
+        game = cls()
+        game._chance_index = int(data.get("chance_index", 0))
+        game._community_index = int(data.get("community_index", 0))
+        raw = data["state"]
+        players = [
+            PlayerProfile(
+                id=str(p["id"]),
+                name=str(p["name"]),
+                is_human=bool(p.get("is_human", False)),
+                skill_level=float(p.get("skill_level", 0.5)),
+            )
+            for p in raw["players"]
+        ]
+        game.state = GameState(
+            game_id=str(raw["game_id"]),
+            game_type=str(raw["game_type"]),
+            players=players,
+            current_player_id=str(raw["current_player_id"]),
+            board=raw["board"],
+            metadata=raw["metadata"],
+            move_log=list(raw.get("move_log", [])),
+        )
+        return game
