@@ -549,10 +549,10 @@ function App() {
                         value={auctionBidAmount}
                         onChange={(e) => setAuctionBidAmount(Number(e.target.value))}
                       />
-                      <button onClick={() => runMove('place_bid', { amount: effectiveBid })}>
+                      <button type="button" onClick={() => runMove('place_bid', { amount: effectiveBid })}>
                         Bid ${effectiveBid}
                       </button>
-                      <button onClick={() => runMove('pass_auction')}>
+                      <button type="button" onClick={() => runMove('pass_auction')}>
                         Pass
                       </button>
                     </div>

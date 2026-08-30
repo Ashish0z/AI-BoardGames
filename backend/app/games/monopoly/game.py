@@ -722,6 +722,8 @@ class MonopolyGame(BoardGame):
         if not self.state:
             raise ValueError("Game has not started")
         ordered_ids = [player.id for player in self.state.players]
+        if current_player_id not in ordered_ids:
+            raise ValueError("Unknown player in auction flow")
         start = ordered_ids.index(current_player_id)
         active_set = set(active_player_ids)
         for offset in range(1, len(ordered_ids) + 1):
